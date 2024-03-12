@@ -72,7 +72,7 @@ static float outerSignal() {
 }
 
 int PerimeterSearchBehavior::configured(const mower_logic::MowerLogicConfig &config) {
-  return config.perimeter_signal!=0;
+  return config.use_perimeter_docking && config.perimeter_signal!=0;
 }
 
 std::string PerimeterSearchBehavior::state_name() {
@@ -138,7 +138,7 @@ Behavior* PerimeterSearchBehavior::execute() {
 }
 
 int PerimeterUndockingBehavior::configured(const mower_logic::MowerLogicConfig &config) {
-  return config.perimeter_signal!=0 && config.undock_distance>1.0;
+  return config.use_perimeter_undocking && config.perimeter_signal!=0 && config.undock_distance>1.0;
 }
 
 std::string PerimeterUndockingBehavior::state_name() {

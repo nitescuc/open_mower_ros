@@ -118,6 +118,9 @@ COPY .github/assets/openmower_entrypoint.sh /openmower_entrypoint.sh
 COPY .github/assets/start.sh /start.sh
 RUN chmod +x /openmower_entrypoint.sh && chmod +x /start.sh
 
+RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> /root/.bashrc
+RUN echo "source /opt/open_mower_ros/devel/setup.bash" > /root/.bashrc
+
 ENTRYPOINT ["/openmower_entrypoint.sh"]
 #CMD ["bash", "-c", "service nginx start; service mosquitto start; roslaunch open_mower open_mower.launch --screen"]
 CMD ["bash", "-c", "/start.sh"]
