@@ -29,6 +29,7 @@
         <param name="motor_hot_temperature" value="$(env OM_MOWING_MOTOR_TEMP_HIGH)"/>
         <param name="motor_cold_temperature" value="$(env OM_MOWING_MOTOR_TEMP_LOW)"/>
         <param name="mow_direction_reverse_areas" value="$(env OM_MOWING_MOW_DIRECTION_REVERSE_AREAS)"/>
+        <param name="mow_direction_inner_first_areas" value="$(env OM_MOWING_MOW_DIRECTION_INNER_FIRST_AREAS)"/>
         <param name="gps_wait_time" value="$(env OM_GPS_WAIT_TIME_SEC)"/>
         <param name="gps_timeout" value="$(env OM_GPS_TIMEOUT_SEC)"/>
         <param name="gps_use_fix_point" value="$(env OM_GPS_USE_FIX_POINT)"/>
@@ -40,6 +41,7 @@
         <param name="docked_pose_y" value="$(env OM_GPS_DOCKED_POSE_Y)"/>
         <param name="max_first_point_attempts" value="$(env OM_MAX_FIRST_POINT_ATTEMPTS)"/>
         <param name="max_first_point_trim_attempts" value="$(env OM_MAX_FIRST_POINT_TRIM_ATTEMPTS)"/>
+        <param name="obstacle_skip_points" value="$(env OM_OBSTACLE_SKIP_POINTS)"/>
     </node>
     <node pkg="slic3r_coverage_planner" type="slic3r_coverage_planner" name="slic3r_coverage_planner" output="screen"/>
 

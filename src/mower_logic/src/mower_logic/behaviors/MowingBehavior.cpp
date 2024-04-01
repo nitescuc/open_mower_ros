@@ -141,6 +141,17 @@ void MowingBehavior::update_actions() {
     registerActions("mower_logic:mowing", actions);
 }
 
+bool is_area_in_param_list(int area, std::string param) {
+    std::stringstream ss (param);
+    std::string item;
+    while (getline(ss, item, ',')) {
+        if (area == stoi(item)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool MowingBehavior::create_mowing_plan(int area_index) {
     ROS_INFO_STREAM("MowingBehavior: Creating mowing plan for area: " << area_index);
     // Delete old plan and progress.
@@ -196,16 +207,7 @@ bool MowingBehavior::create_mowing_plan(int area_index) {
     }
 
     // reverse areas ?
-    bool shouldReverse = false;
-    std::stringstream ss (config.mow_direction_reverse_areas);
-    std::string item;
-    while (getline(ss, item, ',')) {
-        if (area_index == stoi(item)) {
-            shouldReverse = true;
-            break;
-        }
-    }
-    if (shouldReverse) {
+    if (is_area_in_param_list(area_index, config.mow_direction_reverse_areas)) {
         ROS_INFO_STREAM("MowingBehavior: Reversing path for area number: " << area_index);
         for (int i = 0; i < pathSrv.response.paths.size(); i++) {
             auto &path = pathSrv.response.paths[i];
@@ -236,6 +238,13 @@ bool MowingBehavior::create_mowing_plan(int area_index) {
         }
     }
 
+    // inner first ?
+    if (is_area_in_param_list(area_index, config.mow_direction_inner_first_areas)) {
+        ROS_INFO_STREAM("MowingBehavior: Inner first for area: " << area_index);
+        std::sort(pathSrv.response.paths.begin(), pathSrv.response.paths.end(), [](slic3r_coverage_planner::Path a, slic3r_coverage_planner::Path b) {
+            return !a.is_outline && b.is_outline;
+        });
+    }
     currentMowingPaths = pathSrv.response.paths;
 
     return true;
