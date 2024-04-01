@@ -71,6 +71,11 @@ Behavior *UndockingBehavior::execute() {
 
     bool success = result.state_ == actionlib::SimpleClientGoalState::SUCCEEDED;
 
+    if (!success) {
+        ROS_ERROR_STREAM("Error during undock");
+        return &IdleBehavior::INSTANCE;
+    }
+
     // Goto the fix point
     if (config.gps_use_fix_point) {
         ROS_INFO_STREAM("Reaching fix point");
@@ -99,12 +104,6 @@ Behavior *UndockingBehavior::execute() {
 
     // stop the bot for now
     stopMoving();
-
-    if (!success) {
-        ROS_ERROR_STREAM("Error during undock");
-        return &IdleBehavior::INSTANCE;
-    }
-
 
     ROS_INFO_STREAM("Undock success. Waiting for GPS.");
     bool hasGps = waitForGPS();
