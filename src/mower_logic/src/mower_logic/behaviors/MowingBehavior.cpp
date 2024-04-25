@@ -306,7 +306,7 @@ bool MowingBehavior::execute_mowing_plan() {
         {   
             paused_time = ros::Time::now();
             mowerEnabled = false;
-            while (!this->hasGoodGPS()) // while no good GPS we wait
+            while (!this->hasGoodGPS())
             {
                 ROS_INFO_STREAM("MowingBehavior: PAUSED (" << (ros::Time::now()-paused_time).toSec() << "s) (waiting for /odom)");
                 ros::Rate r(1.0);
@@ -383,11 +383,14 @@ bool MowingBehavior::execute_mowing_plan() {
                     if (requested_crash_recovery_flag) {
                         ROS_WARN_STREAM("MowingBehavior: (FIRST POINT) CRASH RECOVERY was requested - stopping path execution and waiting 2sec to calm down.");
                         mbfClient->cancelAllGoals();
+                        mowerEnabled = false;
                         // debounce
                         ros::Duration(2.0).sleep();
                         requested_crash_recovery_flag = false;
                         break;
                     }
+                    // show progress
+                    ROS_INFO_STREAM_THROTTLE(5, "MowingBehavior: (FIRST POINT) Progress: " << getCurrentMowPathIndex() << "/" << path.path.poses.size());                    
                 } else {
                     ROS_INFO_STREAM("MowingBehavior: (FIRST POINT)  Got status " << current_status.state_ << " from MBF/FTCPlanner -> Stopping path execution.");
                     // we're done, break out of the loop
@@ -418,11 +421,18 @@ bool MowingBehavior::execute_mowing_plan() {
                         auto pointsToSkip = getConfig().obstacle_skip_points;
                         auto &poses = path.path.poses;
                         ROS_WARN_STREAM("MowingBehavior: (FIRST POINT) - Attempt " << first_point_trim_counter << " / " << config.max_first_point_trim_attempts << " Trimming first point off the beginning of the mow path.");
-                        poses.erase(poses.begin(), poses.begin() + pointsToSkip);
-                        first_point_trim_counter++;
-                        first_point_attempt_counter = 0; // give it another <config.max_first_point_attempts> attempts
-                        this->setPause();
-                        update_actions();
+                        if (poses.size() > pointsToSkip)
+                        {
+                            poses.erase(poses.begin(), poses.begin() + pointsToSkip);
+                            first_point_trim_counter++;
+                            first_point_attempt_counter = 0; // give it another <config.max_first_point_attempts> attempts
+                            this->setPause();
+                            update_actions();
+                        } else {
+                            // Unable to reach the start of the mow path (we tried multiple attempts for the same point, and we skipped points which also didnt work, time to give up) 
+                            ROS_ERROR_STREAM("MowingBehavior: (FIRST POINT) Max retries reached, we are unable to reach any of the first points - aborting this mow area ...");
+                            currentMowingPaths.erase(currentMowingPaths.begin());
+                        }
                     }
                     else
                     {
@@ -491,6 +501,7 @@ bool MowingBehavior::execute_mowing_plan() {
                     if (requested_crash_recovery_flag) {
                         ROS_INFO_STREAM("MowingBehavior: (MOW) CRASH RECOVERY was requested - stopping path execution and waiting 2sec.");
                         mbfClientExePath->cancelAllGoals();
+                        mowerEnabled = false;
                         // debounce
                         ros::Duration(2.0).sleep();
                         requested_crash_recovery_flag = false;
@@ -537,11 +548,19 @@ bool MowingBehavior::execute_mowing_plan() {
                         currentIndex = 1;
                     }
                     ROS_INFO_STREAM("MowingBehavior (ErrorCatch): Trimming " << currentIndex + pointsToSkip << " points.");
-                    poses.erase(poses.begin(), poses.begin() + currentIndex + pointsToSkip);
-                    ROS_INFO_STREAM("MowingBehavior (ErrorCatch): Poses after trim:" << poses.size());
-                    ROS_INFO_STREAM("MowingBehavior: (MOW) PAUSED due to MBF Error");
-                    this->setPause();
-                    update_actions();
+                    if (poses.size() > currentIndex + pointsToSkip)
+                    {
+                        poses.erase(poses.begin(), poses.begin() + currentIndex + pointsToSkip);
+                        ROS_INFO_STREAM("MowingBehavior (ErrorCatch): Poses after trim:" << poses.size());
+                        ROS_INFO_STREAM("MowingBehavior: (MOW) PAUSED due to MBF Error");
+                        this->setPause();
+                        update_actions();
+                    } else {
+                        // Unable to reach the start of the mow path (we tried multiple attempts for the same point, and we skipped points which also didnt work, time to give up) 
+                        ROS_ERROR_STREAM("MowingBehavior: (MOW) Max retries reached, we are unable to reach any of the first points - aborting this mow area ...");
+                        currentMowingPaths.erase(currentMowingPaths.begin());
+                        // continue with next segment
+                    }
                 }
             }
         }
@@ -561,6 +580,7 @@ void MowingBehavior::command_home() {
         // Then instantly abort i.e. go to dock.
     }
     this->abort();
+    this->shared_state->active_semiautomatic_task = false;
 }
 
 void MowingBehavior::command_start() {
