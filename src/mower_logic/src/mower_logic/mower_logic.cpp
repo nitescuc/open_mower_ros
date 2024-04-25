@@ -306,14 +306,16 @@ bool setMowerEnabled(bool enabled)
         enabled = false;
     }
     
-    // status changed and debounce
-    if ((mowerEnabled != enabled) && (ros::Time::now() - lastMowerStatusChanged > ros::Duration(2.0)))
+    // status changed and make sure we send the command every 10 seconds
+    if ((mowerEnabled != enabled) || (ros::Time::now() - lastMowerStatusChanged > ros::Duration(10.0)))
+    //if ((mowerEnabled != enabled) || (enabled && (last_status.mow_esc_status.temperature_pcb < 0.5)))
+    // if (mowerEnabled != enabled)
     {
         lastMowerStatusChanged = ros::Time::now();
-        ros::Time started = ros::Time::now();
+        ros::WallTime started = ros::WallTime::now();
         mower_msgs::MowerControlSrv mow_srv;
         mow_srv.request.mow_enabled = enabled;
-        mow_srv.request.mow_direction = started.sec & 0x1; // Randomize mower direction on second
+        mow_srv.request.mow_direction = (started.sec >> 12) & 0x1; // Randomize mower direction on hour
         ROS_WARN_STREAM("#### om_mower_logic: setMowerEnabled(" << enabled << ", " << static_cast<unsigned>(mow_srv.request.mow_direction) << ") call");
 
         ros::Rate retry_delay(1);
@@ -332,7 +334,7 @@ bool setMowerEnabled(bool enabled)
             ROS_ERROR_STREAM("Error setting mower enabled. THIS SHOULD NEVER HAPPEN");
         }
 
-        ROS_WARN_STREAM("#### om_mower_logic: setMowerEnabled(" << enabled << ", " << static_cast<unsigned>(mow_srv.request.mow_direction) << ") call completed within " << (ros::Time::now() - started).toSec() << "s");
+        ROS_WARN_STREAM("#### om_mower_logic: setMowerEnabled(" << enabled << ", " << static_cast<unsigned>(mow_srv.request.mow_direction) << ") call completed within " << (ros::WallTime::now() - started).toSec() << "s");
         mowerEnabled = enabled;
     }
 
@@ -444,9 +446,7 @@ void checkSafety(const ros::TimerEvent &timer_event) {
     const auto status_time = getStatusTime();
     const auto last_good_gps = getLastGoodGPS();
 
-
-    // call the mower
-    setMowerEnabled(currentBehavior != nullptr && currentBehavior->mower_enabled());
+    bool should_enable_mower = true;
 
     high_level_status.emergency = last_status.emergency;
     high_level_status.is_charging = last_status.v_charge > 10.0;
@@ -495,8 +495,10 @@ void checkSafety(const ros::TimerEvent &timer_event) {
     if(last_status.emergency) {
         if(currentBehavior == &MowingBehavior::INSTANCE) {
             setEmergencyMode(true);
+            should_enable_mower = false;
         } else if(currentBehavior != &AreaRecordingBehavior::INSTANCE && currentBehavior != &IdleBehavior::INSTANCE) {
             abortExecution();
+            should_enable_mower = false;
         } else if(last_status.v_charge > 10.0) {
             // emergency and docked and idle or area recording, so it's safe to reset the emergency mode, reset it. It's safe since we won't start moving in this mode.
             setEmergencyMode(false);
@@ -532,9 +534,13 @@ void checkSafety(const ros::TimerEvent &timer_event) {
         if(gpsTimeout) {
             stopBlade();
             stopMoving();
+            should_enable_mower = false;
         }
         currentBehavior->setGoodGPS(!gpsTimeout);
     }
+
+    // call the mower
+    setMowerEnabled(should_enable_mower && currentBehavior != nullptr && currentBehavior->mower_enabled());
 
     double battery_percent = (last_status.v_battery - last_config.battery_empty_voltage) / (last_config.battery_full_voltage - last_config.battery_empty_voltage);
     if(battery_percent > 1.0) {
