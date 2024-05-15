@@ -26,21 +26,6 @@ RUN mkdir -p /opt/range_sensor_layer_workspace/src && cd /opt/range_sensor_layer
  && bash -c "source /opt/ros/$ROS_DISTRO/setup.bash && cd /opt/range_sensor_layer_workspace && catkin_make -DCMAKE_INSTALL_PREFIX=/opt/ros/$ROS_DISTRO install"
 
 
-# # Install mosquitto broker
-# RUN apt-get install --yes mosquitto
-
-# # Install our config
-# COPY --link ./assets/mosquitto.conf /etc/mosquitto/mosquitto.conf
-
-# # Install nginx for hosting the app
-# RUN apt-get install --yes nginx
-
-# # Remove default nginx config (else it will run on port 80)
-# RUN rm /etc/nginx/sites-enabled/*
-
-# # Install nginx config
-# COPY --link ./assets/nginx.conf /etc/nginx/conf.d/default.conf
-
 # First stage: Pull the git and all submodules, other stages depend on it
 FROM base as fetch
 
@@ -52,25 +37,6 @@ COPY --link ./ /opt/open_mower_ros
 WORKDIR /opt/open_mower_ros
 
 RUN git submodule update --init --recursive
-
-
-# Get slic3r_coverage_planner and build that. We will pull the finished install folder from this.
-# This stage should cache most of the time, that's why it's not derived from the fetch stage, but copies stuff instead.
-FROM base as slic3r
-
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Fetch the slic3r planner from the repo (this will cache if unchanged)
-COPY --link --from=fetch /opt/open_mower_ros/src/lib/slic3r_coverage_planner /opt/slic3r_coverage_planner_workspace/src
-
-WORKDIR /opt/slic3r_coverage_planner_workspace
-RUN rosdep install --from-paths src --ignore-src --simulate | \
-    sed --expression '1d' | sort | tr -d '\n' | sed --expression 's/  apt-get install//g' > apt-install_list && \
-    apt-get install --no-install-recommends --yes $(cat apt-install_list) && \
-    rm -rf /var/lib/apt/lists/* apt-install_list
-RUN bash -c "source /opt/ros/$ROS_DISTRO/setup.bash && catkin_make"
-RUN bash -c "source /opt/ros/$ROS_DISTRO/setup.bash && source /opt/slic3r_coverage_planner_workspace/devel/setup.bash && catkin_make -DCMAKE_INSTALL_PREFIX=/opt/prebuilt/slic3r_coverage_planner install"
-
 
 # Fetch the repo and assemble the list of dependencies. We will pull these in the next step and actually run install on them
 # If the package list is the same as last time, the apt install step is cached as well which saves a lot of time.
@@ -94,7 +60,7 @@ FROM base as assemble
 ENV DEBIAN_FRONTEND=noninteractive
 
 #Fetch the slic3r built earlier, this only changes if slic3r was changed (probably never)
-COPY --link --from=slic3r /opt/prebuilt/slic3r_coverage_planner /opt/prebuilt/slic3r_coverage_planner
+COPY --link --from=tazlogic/open-mower-slic3r /opt/prebuilt/slic3r_coverage_planner /opt/prebuilt/slic3r_coverage_planner
 
 #Fetch the list of packages, this only changes if new dependencies have been added (only sometimes)
 COPY --link --from=dependencies /apt-install_list /apt-install_list
