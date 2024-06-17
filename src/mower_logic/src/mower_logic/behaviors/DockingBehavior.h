@@ -43,6 +43,8 @@ private:
 
     bool dock_straight();
 
+    bool execute_goal(actionlib::SimpleActionClient<mbf_msgs::MoveBaseAction> *client, mbf_msgs::MoveBaseGoal goal);
+
 public:
     std::string state_name() override;
 

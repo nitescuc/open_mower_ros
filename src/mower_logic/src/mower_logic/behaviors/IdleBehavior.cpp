@@ -89,6 +89,11 @@ Behavior *IdleBehavior::execute() {
             return &AreaRecordingBehavior::INSTANCE;
         }
 
+        if (start_docking) {
+            start_docking = false;
+            return &DockingBehavior::INSTANCE;
+        }
+
         // This gets called if we need to refresh, e.g. on clearing maps
         if(aborted) {
             return &IdleBehavior::INSTANCE;
@@ -134,7 +139,11 @@ bool IdleBehavior::mower_enabled() {
 }
 
 void IdleBehavior::command_home() {
-    // IdleBehavior == docked, don't do anything.
+    // if is docked, don't do anything else dock
+    const auto last_status = getStatus();
+    if (last_status.v_charge < 5.0) {
+        start_docking = true;
+    }
 }
 
 void IdleBehavior::command_start() {

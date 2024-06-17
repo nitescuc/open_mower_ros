@@ -29,6 +29,7 @@ class IdleBehavior : public Behavior {
 private:
     bool manual_start_mowing = false;
     bool start_area_recorder = false;
+    bool start_docking = false;
     std::vector<xbot_msgs::ActionInfo> actions;
 
 public:
