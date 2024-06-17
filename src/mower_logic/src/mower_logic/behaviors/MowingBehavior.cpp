@@ -33,6 +33,7 @@ extern void setConfig(mower_logic::MowerLogicConfig);
 
 extern void registerActions(std::string prefix, const std::vector<xbot_msgs::ActionInfo> &actions);
 
+extern bool calibrateGyro();
 extern bool setGPSRtkFloat(bool enabled);
 
 MowingBehavior MowingBehavior::INSTANCE;
@@ -84,6 +85,8 @@ void MowingBehavior::enter() {
     skip_area = false;
     paused = aborted = false;
 
+    // recalibrate gyro
+    calibrateGyro();
     // accept less precision when mowing
     setGPSRtkFloat(true);
 
@@ -354,6 +357,8 @@ bool MowingBehavior::execute_mowing_plan() {
             ros::Rate r(10);
 
             // wait for path execution to finish
+            int old_index = -1;
+            ros::Time last_index_time = ros::Time::now();
             while (ros::ok()) {
                 current_status = mbfClient->getState();
                 if (current_status.state_ == actionlib::SimpleClientGoalState::ACTIVE ||
@@ -390,8 +395,20 @@ bool MowingBehavior::execute_mowing_plan() {
                         requested_crash_recovery_flag = false;
                         break;
                     }
+                    int index = getCurrentMowPathIndex();
+                    if ((index != old_index) || !this->hasGoodGPS()) {
+                        last_index_time = ros::Time::now();
+                        old_index = index;
+                    } else {
+                        if ((ros::Time::now() - last_index_time).toSec() > 30.0) {
+                            ROS_ERROR_STREAM("MowingBehavior: (FIRST POINT) - No progress for 30 seconds, stopping path execution.");
+                            mbfClient->cancelAllGoals();
+                            mowerEnabled = false;
+                            break;
+                        }
+                    }
                     // show progress
-                    ROS_INFO_STREAM_THROTTLE(5, "MowingBehavior: (FIRST POINT) Progress: " << getCurrentMowPathIndex() << "/" << path.path.poses.size());                    
+                    ROS_INFO_STREAM_THROTTLE(5, "MowingBehavior: (FIRST POINT) Progress: " << index);                    
                 } else {
                     ROS_INFO_STREAM("MowingBehavior: (FIRST POINT)  Got status " << current_status.state_ << " from MBF/FTCPlanner -> Stopping path execution.");
                     // we're done, break out of the loop

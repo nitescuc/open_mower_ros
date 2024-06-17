@@ -50,12 +50,14 @@
 #include "xbot_positioning/GPSControlSrv.h"
 #include "xbot_positioning/GPSEnableFloatRtkSrv.h"
 #include "xbot_positioning/SetPoseSrv.h"
+#include "xbot_positioning/CalibrateGyroSrv.h"
 #include "xbot_msgs/RegisterActionsSrv.h"
 #include "sensor_msgs/Range.h"
 #include <mutex>
 #include <atomic>
 
-ros::ServiceClient pathClient, mapClient, dockingPointClient, gpsClient, gpsFloatRtkClient, mowClient, emergencyClient, pathProgressClient, setNavPointClient, clearNavPointClient, clearMapClient, positioningClient, actionRegistrationClient;
+ros::ServiceClient pathClient, mapClient, dockingPointClient, gpsClient, gpsFloatRtkClient, calibrateGyroClient, mowClient;
+ros::ServiceClient emergencyClient, pathProgressClient, setNavPointClient, clearNavPointClient, clearMapClient, positioningClient, actionRegistrationClient;
 
 ros::NodeHandle *n;
 ros::NodeHandle *paramNh;
@@ -292,6 +294,11 @@ bool setGPSRtkFloat(bool enabled) {
     return success;
 }
 
+bool calibrateGyro() {
+    xbot_positioning::CalibrateGyroSrv calibrate_srv;
+    calibrateGyroClient.call(calibrate_srv);
+}
+
 
 /// @brief If the BLADE Motor is not in the requested status (enabled),we call the 
 ///        the mower_service/mow_enabled service to enable/disable. TODO: get feedback about spinup and delay if needed
@@ -316,13 +323,13 @@ bool setMowerEnabled(bool enabled)
         mower_msgs::MowerControlSrv mow_srv;
         mow_srv.request.mow_enabled = enabled;
         mow_srv.request.mow_direction = (started.sec >> 12) & 0x1; // Randomize mower direction on hour
-        ROS_WARN_STREAM("#### om_mower_logic: setMowerEnabled(" << enabled << ", " << static_cast<unsigned>(mow_srv.request.mow_direction) << ") call");
+        // ROS_WARN_STREAM("#### om_mower_logic: setMowerEnabled(" << enabled << ", " << static_cast<unsigned>(mow_srv.request.mow_direction) << ") call");
 
         ros::Rate retry_delay(1);
         bool success = false;
         for(int i = 0; i < 10; i++) {
             if(mowClient.call(mow_srv)) {
-                ROS_INFO_STREAM("successfully set mower enabled to " << enabled << " (direction " << static_cast<unsigned>(mow_srv.request.mow_direction) << ")");
+                // ROS_INFO_STREAM("successfully set mower enabled to " << enabled << " (direction " << static_cast<unsigned>(mow_srv.request.mow_direction) << ")");
                     success = true;
                 break;
             }
@@ -334,7 +341,7 @@ bool setMowerEnabled(bool enabled)
             ROS_ERROR_STREAM("Error setting mower enabled. THIS SHOULD NEVER HAPPEN");
         }
 
-        ROS_WARN_STREAM("#### om_mower_logic: setMowerEnabled(" << enabled << ", " << static_cast<unsigned>(mow_srv.request.mow_direction) << ") call completed within " << (ros::WallTime::now() - started).toSec() << "s");
+        // ROS_WARN_STREAM("#### om_mower_logic: setMowerEnabled(" << enabled << ", " << static_cast<unsigned>(mow_srv.request.mow_direction) << ") call completed within " << (ros::WallTime::now() - started).toSec() << "s");
         mowerEnabled = enabled;
     }
 
@@ -572,9 +579,17 @@ void reconfigureCB(mower_logic::MowerLogicConfig &c, uint32_t level) {
 }
 
 bool startInAreaCommand(mower_msgs::StartInAreaSrvRequest &req, mower_msgs::StartInAreaSrvResponse &res) {
-    last_config.current_area = req.area;
-    last_config.clear_path_on_start = true;
+    ROS_INFO_STREAM("Starting in area " << req.area << ". Clearing path on start");
+    // reset mowing behavior otherwise it will continue where it left off
+//    MowingBehavior::INSTANCE.reset();
+    // set the current area
+    auto cfg = getConfig();
+    cfg.current_area = req.area;
+    cfg.clear_path_on_start = true;
+    setConfig(cfg);
+    // start
     if (currentBehavior) {
+        ROS_INFO_STREAM("Current behavior exists: " << currentBehavior->state_name());
         currentBehavior->command_start();
     }
     return true;
@@ -681,6 +696,8 @@ int main(int argc, char **argv) {
             "xbot_positioning/set_gps_state");
     gpsFloatRtkClient = n->serviceClient<xbot_positioning::GPSEnableFloatRtkSrv>(
             "xbot_positioning/set_float_rtk_enabled");
+    calibrateGyroClient = n->serviceClient<xbot_positioning::CalibrateGyroSrv>(
+            "xbot_positioning/calibrate_gyro");
     positioningClient = n->serviceClient<xbot_positioning::SetPoseSrv>(
             "xbot_positioning/set_robot_pose");
     actionRegistrationClient = n->serviceClient<xbot_msgs::RegisterActionsSrv>(

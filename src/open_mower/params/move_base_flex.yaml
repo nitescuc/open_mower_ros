@@ -13,7 +13,19 @@ controllers:
 #controller_patience: 30.0
 
 #planner_frequency: 1.0
-#planner_patience: 5.0
+#planner_patience: 15.0
 
 #oscillation_timeout: 10.0
 #oscillation_distance: 0.2
+
+recovery_behaviors:
+  - name: aggressive_reset
+    type: clear_costmap_recovery/ClearCostmapRecovery
+  - name: rotate_recovery
+    type: rotate_recovery/RotateRecovery
+
+aggressive_reset:
+  reset_distance: 0.1
+  layer_names:
+    - obstacles
+    - range_sensor_layer
