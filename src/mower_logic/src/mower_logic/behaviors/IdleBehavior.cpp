@@ -41,7 +41,7 @@ std::string IdleBehavior::state_name() {
 
 Behavior *IdleBehavior::execute() {
 
-
+    ROS_INFO_STREAM("IDLE EXECUTE enter; aborted=" << aborted);
     // Check, if we have a configured map. If not, print info and go to area recorder
     mower_map::GetMowingAreaSrv mapSrv;
     mapSrv.request.index = 0;
@@ -56,6 +56,7 @@ Behavior *IdleBehavior::execute() {
         ROS_WARN("We don't have a docking point configured. Starting Area Recorder!");
         return &AreaRecordingBehavior::INSTANCE;
     }
+    ROS_INFO_STREAM("GOT DOCKING POINT");
 
     setGPS(false);
 

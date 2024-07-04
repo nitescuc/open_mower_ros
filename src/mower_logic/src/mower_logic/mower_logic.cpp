@@ -184,6 +184,7 @@ void setRobotPoseDocked() {
         return;
     }
 
+    ROS_INFO_STREAM("SET ROBOT POSE DOCKED");
     mower_map::GetDockingPointSrv get_docking_point_srv;
     if(!dockingPointClient.call(get_docking_point_srv)) {
         ROS_WARN("We don't have a docking point configured.");

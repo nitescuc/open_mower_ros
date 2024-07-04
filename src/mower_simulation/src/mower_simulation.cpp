@@ -20,6 +20,7 @@
 #include "mower_msgs/Status.h"
 #include "mower_msgs/MowerControlSrv.h"
 #include "xbot_positioning/GPSControlSrv.h"
+#include "xbot_positioning/GPSEnableFloatRtkSrv.h"
 #include "mower_msgs/EmergencyStopSrv.h"
 #include "geometry_msgs/Twist.h"
 #include "geometry_msgs/PoseWithCovarianceStamped.h"
@@ -52,6 +53,10 @@ double dockX = 0, dockY = 0;
 
 
 bool setGpsState(xbot_positioning::GPSControlSrvRequest &req, xbot_positioning::GPSControlSrvResponse &res) {
+    return true;
+}
+
+bool setGpsFloatRtkEnabled(xbot_positioning::GPSEnableFloatRtkSrvRequest &req, xbot_positioning::GPSEnableFloatRtkSrvResponse &res) {
     return true;
 }
 
@@ -107,6 +112,7 @@ void publishStatus(const ros::TimerEvent &timer_event) {
 
     fake_mow_status.v_battery = config.battery_voltage;
 
+    //ROS_INFO_STREAM_THROTTLE(1, "HAS dock: " << has_dock << " - X=" << dockX << "poseX=" << poseMsg.pose.pose.position.x);
     if(has_dock && sqrt(pow(poseMsg.pose.pose.position.x - dockX, 2)+pow(poseMsg.pose.pose.position.y - dockY, 2)) < 0.5) {
         // "docked"
         fake_mow_status.v_charge = config.battery_voltage + 0.2;
@@ -176,7 +182,7 @@ bool setPose(xbot_positioning::SetPoseSrvRequest &req, xbot_positioning::SetPose
 
 
     poseMsg.header.stamp = ros::Time::now();
-    poseMsg.header.frame_id = "base_link";
+    poseMsg.header.frame_id = "map";
     poseMsg.header.seq++;
     poseMsg.pose.pose.position.x = req.robot_pose.position.x;
     poseMsg.pose.pose.position.y = req.robot_pose.position.y;
@@ -243,6 +249,7 @@ int main(int argc, char **argv) {
     ros::Subscriber odom_sub = n.subscribe("/mower/odom", 0, odomReceived, ros::TransportHints().tcpNoDelay(true));
     ros::ServiceServer mow_service = n.advertiseService("mower_service/mow_enabled", setMowEnabled);
     ros::ServiceServer gps_service = n.advertiseService("xbot_positioning/set_gps_state", setGpsState);
+    ros::ServiceServer gps_float_rtk_service = n.advertiseService("xbot_positioning/set_float_rtk_enabled", setGpsFloatRtkEnabled);
     ros::ServiceServer emergency_service = n.advertiseService("mower_service/emergency", setEmergencyStop);
     ros::ServiceServer pose_service = n.advertiseService("xbot_positioning/set_robot_pose", setPose);
 

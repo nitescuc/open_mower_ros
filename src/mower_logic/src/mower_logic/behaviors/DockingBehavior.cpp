@@ -361,6 +361,7 @@ void DockingBehavior::enter() {
     // start with target approach and then dock later
     inApproachMode = true;
 
+    ROS_INFO_STREAM("DOCKING ENTER");
     // Get the docking pose in map
     mower_map::GetDockingPointSrv get_docking_point_srv;
     dockingPointClient.call(get_docking_point_srv);
