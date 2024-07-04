@@ -111,7 +111,7 @@ void MowingBehavior::reset() {
     auto config = getConfig();
     config.current_area = 0;
 
-    if (config.automatic_mode == eAutoMode::SEMIAUTO) {
+    if (config.automatic_mode == eAutoMode::SEMIAUTO && shared_state != NULL) {
         ROS_INFO_STREAM("MowingBehavior: Finished semiautomatic task");
         shared_state->active_semiautomatic_task = false;
     }
