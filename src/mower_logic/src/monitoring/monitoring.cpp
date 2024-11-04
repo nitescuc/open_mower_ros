@@ -22,6 +22,9 @@
 #include "xbot_msgs/SensorDataDouble.h"
 #include "mower_msgs/HighLevelStatus.h"
 #include "mower_msgs/Status.h"
+#include "nav_msgs/Odometry.h"
+
+bool is_idle = true;
 
 ros::Publisher state_pub;
 xbot_msgs::RobotState state;
@@ -62,10 +65,15 @@ xbot_msgs::SensorInfo si_gps_accuracy;
 ros::Publisher si_gps_accuracy_pub;
 ros::Publisher gps_accuracy_data_pub;
 
+xbot_msgs::SensorInfo si_odom_covariance;
+ros::Publisher si_odom_covariance_pub;
+ros::Publisher odom_covariance_data_pub;
+
 ros::NodeHandle *n;
 
 ros::Time last_status_update(0);
 ros::Time last_pose_update(0);
+ros::Time last_odom_update(0);
 
 void status(const mower_msgs::Status::ConstPtr &msg) {
     // Rate limit to 2Hz
@@ -102,6 +110,8 @@ void status(const mower_msgs::Status::ConstPtr &msg) {
 }
 
 void high_level_status(const mower_msgs::HighLevelStatus::ConstPtr &msg) {
+    is_idle = msg->state_name == "IDLE";
+
     state.gps_percentage = msg->gps_quality_percent;
     state.current_state = msg->state_name;
     state.current_sub_state = msg->sub_state_name;
@@ -124,6 +134,20 @@ void pose_received(const xbot_msgs::AbsolutePose::ConstPtr &msg) {
     sensor_data.stamp = msg->header.stamp;
     sensor_data.data = msg->position_accuracy;
     gps_accuracy_data_pub.publish(sensor_data);
+}
+
+void odom_received(const nav_msgs::Odometry::ConstPtr &msg) {
+    if (is_idle)
+        return;
+    // Rate limit to 2Hz
+    if((msg->header.stamp - last_odom_update).toSec() < 0.5)
+        return;
+    last_odom_update = msg->header.stamp;
+
+    xbot_msgs::SensorDataDouble sensor_data;
+    sensor_data.stamp = msg->header.stamp;
+    sensor_data.data = msg->pose.covariance[0];
+    odom_covariance_data_pub.publish(sensor_data);
 }
 
 void registerSensors() {
@@ -208,6 +232,14 @@ void registerSensors() {
     gps_accuracy_data_pub = n->advertise<xbot_msgs::SensorDataDouble>("xbot_monitoring/sensors/" + si_gps_accuracy.sensor_id + "/data",10);
     si_gps_accuracy_pub.publish(si_gps_accuracy);
 
+    si_odom_covariance.sensor_id = "om_odom_covariance";
+    si_odom_covariance.sensor_name = "Odom Covariance";
+    si_odom_covariance.value_type = xbot_msgs::SensorInfo::TYPE_DOUBLE;
+    si_odom_covariance.value_description = xbot_msgs::SensorInfo::VALUE_DESCRIPTION_PERCENT;
+    si_odom_covariance.unit = "%";
+    si_odom_covariance_pub = n->advertise<xbot_msgs::SensorInfo>("xbot_monitoring/sensors/" + si_odom_covariance.sensor_id + "/info", 1, true);
+    odom_covariance_data_pub = n->advertise<xbot_msgs::SensorDataDouble>("xbot_monitoring/sensors/" + si_odom_covariance.sensor_id + "/data",10);
+    si_odom_covariance_pub.publish(si_odom_covariance);
 
 }
 
@@ -219,6 +251,7 @@ int main(int argc, char **argv) {
     registerSensors();
 
     ros::Subscriber pose_sub = n->subscribe("xbot_positioning/xb_pose", 10, pose_received);
+    ros::Subscriber map_filtered_sub = n->subscribe("/odometry_map/filtered", 10, odom_received);
     ros::Subscriber state_sub = n->subscribe("mower_logic/current_state", 10, high_level_status);
     ros::Subscriber status_sub = n->subscribe("mower/status", 10, status);
 
