@@ -77,6 +77,11 @@ public:
     }
 
     void setGoodGPS(bool isGood) {
+        if (isGood && !isGPSGood) {
+            ROS_INFO_STREAM("bahavior: GPS is now good");
+        } else if (!isGood && isGPSGood) {
+            ROS_WARN_STREAM("behavior: GPS is now bad");
+        }
         isGPSGood = isGood;
     }
 
