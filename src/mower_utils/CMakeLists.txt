@@ -9,11 +9,14 @@ project(mower_utils)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   open_mower
+  tf2_ros
+  rosbag_snapshot
   roscpp
         xbot_msgs
         geometry_msgs
         mower_map
         slic3r_coverage_planner
+        message_generation
 )
 
 ## System dependencies are found with CMake's conventions
@@ -57,11 +60,10 @@ find_package(catkin REQUIRED COMPONENTS
 # )
 
 ## Generate services in the 'srv' folder
-# add_service_files(
-#   FILES
-#   Service1.srv
-#   Service2.srv
-# )
+add_service_files(
+        FILES
+        GPSControlSrv.srv
+)
 
 ## Generate actions in the 'action' folder
 # add_action_files(
@@ -71,10 +73,11 @@ find_package(catkin REQUIRED COMPONENTS
 # )
 
 ## Generate added messages and services with any dependencies listed here
-# generate_messages(
-#   DEPENDENCIES
-#   std_msgs  # Or other packages containing msgs
-# )
+generate_messages(
+        DEPENDENCIES
+        std_msgs
+        geometry_msgs
+)
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
@@ -162,6 +165,16 @@ add_executable(xbot_pose_converter
         )
 add_dependencies(xbot_pose_converter ${catkin_EXPORTED_TARGETS} ${${PROJECT_NAME}_EXPORTED_TARGETS})
 target_link_libraries(xbot_pose_converter ${catkin_LIBRARIES})
+add_executable(odometry_converter
+        src/odometry_converter.cpp
+        )
+add_dependencies(odometry_converter ${catkin_EXPORTED_TARGETS} ${${PROJECT_NAME}_EXPORTED_TARGETS})
+target_link_libraries(odometry_converter ${catkin_LIBRARIES})
+add_executable(snapshot_controller
+        src/snapshot_controller.cpp
+        )
+add_dependencies(snapshot_controller ${catkin_EXPORTED_TARGETS} ${${PROJECT_NAME}_EXPORTED_TARGETS})
+target_link_libraries(snapshot_controller ${catkin_LIBRARIES})
 #############
 ## Install ##
 #############
