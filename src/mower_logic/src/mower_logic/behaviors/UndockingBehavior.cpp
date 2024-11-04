@@ -15,12 +15,14 @@
 //
 //
 #include "UndockingBehavior.h"
+#include <tf2_ros/transform_listener.h>
 
 extern ros::ServiceClient dockingPointClient;
 extern actionlib::SimpleActionClient<mbf_msgs::ExePathAction> *mbfClientExePath;
 extern xbot_msgs::AbsolutePose getPose();
 extern mower_msgs::Status getStatus();
 extern actionlib::SimpleActionClient<mbf_msgs::MoveBaseAction> *mbfClient;
+extern tf2_ros::Buffer tfBuffer;
 
 extern void setRobotPoseDocked();
 extern void stopMoving();
@@ -36,15 +38,33 @@ std::string UndockingBehavior::state_name() {
 }
 
 Behavior *UndockingBehavior::execute() {
+    ros::Duration(1.0).sleep();
+
+    ROS_INFO("Undocking: getting initial pose from tf");
+    geometry_msgs::PoseStamped pose;
+    pose.header.frame_id = "map";
+    try {
+        geometry_msgs::TransformStamped transformStamped = tfBuffer.lookupTransform("map", "base_link", ros::Time(0));
+        ROS_INFO_STREAM("om_mower_logic map/base_link: " << transformStamped.transform.translation << " - " << transformStamped.transform.rotation);
+        pose.pose.position.x = transformStamped.transform.translation.x;
+        pose.pose.position.y = transformStamped.transform.translation.y;
+        pose.pose.orientation.x = transformStamped.transform.rotation.x;
+        pose.pose.orientation.y = transformStamped.transform.rotation.y;
+        pose.pose.orientation.z = transformStamped.transform.rotation.z;
+        pose.pose.orientation.w = transformStamped.transform.rotation.w;
+    }
+    catch (tf2::TransformException &ex) {
+        ROS_ERROR("om_mower_logic map/base_link: %s", ex.what());
+        return &IdleBehavior::INSTANCE;
+    }
 
     // get robot's current pose from odometry.
-    xbot_msgs::AbsolutePose pose = getPose();
+    // xbot_msgs::AbsolutePose pose = getPose();
     tf2::Quaternion quat;
-    tf2::fromMsg(pose.pose.pose.orientation, quat);
+    tf2::fromMsg(pose.pose.orientation, quat);
     tf2::Matrix3x3 m(quat);
     double roll, pitch, yaw;
     m.getRPY(roll, pitch, yaw);
-
 
     mbf_msgs::ExePathGoal exePathGoal;
 
@@ -52,13 +72,16 @@ Behavior *UndockingBehavior::execute() {
 
 
     int undock_point_count = config.undock_distance * 10.0;
-    for (int i = 0; i < undock_point_count; i++) {
+    // for (int i = 0; i < undock_point_count; i++) { // point 0 is the dock so no use to put it here
+    for (int i = 1; i < undock_point_count; i++) {
         geometry_msgs::PoseStamped docking_pose_stamped_front;
-        docking_pose_stamped_front.pose = pose.pose.pose;
+        docking_pose_stamped_front.pose = pose.pose;
         docking_pose_stamped_front.header = pose.header;
         docking_pose_stamped_front.pose.position.x -= cos(yaw) * (i / 10.0);
         docking_pose_stamped_front.pose.position.y -= sin(yaw) * (i / 10.0);
         path.poses.push_back(docking_pose_stamped_front);
+        // ROS_INFO("Undocking point %d: %f %f", i, docking_pose_stamped_front.pose.position.x,
+        //          docking_pose_stamped_front.pose.position.y);
     }
 
     exePathGoal.path = path;
@@ -67,7 +90,8 @@ Behavior *UndockingBehavior::execute() {
     exePathGoal.tolerance_from_action = true;
     exePathGoal.controller = "DockingFTCPlanner";
 
-    auto result = mbfClientExePath->sendGoalAndWait(exePathGoal);
+    actionlib::SimpleActionClient<mbf_msgs::ExePathAction> undockMbfClientExePath("/move_base_flex/exe_path");
+    auto result = undockMbfClientExePath.sendGoalAndWait(exePathGoal, ros::Duration(60.0), ros::Duration(60.0));
 
     bool success = result.state_ == actionlib::SimpleClientGoalState::SUCCEEDED;
 
@@ -87,13 +111,19 @@ Behavior *UndockingBehavior::execute() {
             return &IdleBehavior::INSTANCE;
         }
 
-        geometry_msgs::PoseStamped fix_point = path.poses.back();
+        geometry_msgs::PoseStamped fix_point;
+        fix_point.header.frame_id = "map";
         fix_point.pose.position.x = config.gps_fix_point_x;
         fix_point.pose.position.y = config.gps_fix_point_y;
+        fix_point.pose.position.z = 0.0;
+        tf2::Quaternion quat;
+        quat.setRPY(0, 0, 0);
+        fix_point.pose.orientation = tf2::toMsg(quat);
         mbf_msgs::MoveBaseGoal moveBaseGoal;
         moveBaseGoal.target_pose = fix_point;
         moveBaseGoal.controller = "FTCPlanner";
-        auto result = mbfClient->sendGoalAndWait(moveBaseGoal);
+        actionlib::SimpleActionClient<mbf_msgs::MoveBaseAction> undockMbfClient("/move_base_flex/move_base");
+        auto result = undockMbfClient.sendGoalAndWait(moveBaseGoal);
         if (result.state_ != result.SUCCEEDED) {
             ROS_ERROR_STREAM("Error reaching fix point");
             return &IdleBehavior::INSTANCE;
