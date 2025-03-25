@@ -1,0 +1,12 @@
+# Get an image with git and apt-get update
+FROM docker.io/ros:noetic-ros-base-focal
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Set timezone
+ENV TZ=Europe/Paris
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+RUN apt-get update && \
+    apt-get install --yes git nano wget ros-noetic-foxglove-bridge
+
+CMD ["roslaunch", "--screen", "foxglove_bridge", "foxglove_bridge.launch", "port:=8765"]

@@ -1,5 +1,5 @@
 # Get an image with git and apt-get update
-FROM docker.io/ros:noetic-ros-base-focal as base
+FROM docker.io/ros:noetic-ros-base-focal AS base
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Set timezone
@@ -7,7 +7,11 @@ ENV TZ=Europe/Paris
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 RUN apt-get update && \
-    apt-get install --yes git nano
+    apt-get install --yes git nano wget ros-noetic-map-server ros-noetic-amcl ros-noetic-foxglove-bridge
+RUN echo "deb http://archive.raspberrypi.org/debian/ buster main ui" > /etc/apt/sources.list.d/raspi.list && \
+    wget https://archive.raspbian.org/raspbian.public.key -O - | apt-key add - && \
+    wget https://archive.raspberrypi.org/debian/raspberrypi.gpg.key -O - | apt-key add - && \
+    apt update && apt install -y pigpio
 RUN rosdep update
 
 # Install rosserial
@@ -24,3 +28,11 @@ RUN mkdir -p /opt/range_sensor_layer_workspace/src && cd /opt/range_sensor_layer
     apt-get install --no-install-recommends --yes $(cat apt-install_list) && \
     rm -rf /var/lib/apt/lists/* apt-install_list \
  && bash -c "source /opt/ros/$ROS_DISTRO/setup.bash && cd /opt/range_sensor_layer_workspace && catkin_make -DCMAKE_INSTALL_PREFIX=/opt/ros/$ROS_DISTRO install"
+
+COPY --link ./ /opt/open_mower_ros
+WORKDIR /opt/open_mower_ros
+RUN apt-get update && \
+    rosdep install --from-paths src --ignore-src --simulate | \
+    sed --expression '1d' | sort | tr -d '\n' | sed --expression 's/  apt-get install//g' > /apt-install_list && \
+    apt-get install --no-install-recommends --yes $(cat /apt-install_list) && \
+    rm -rf /var/lib/apt/lists/*

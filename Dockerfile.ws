@@ -1,4 +1,4 @@
-FROM tazlogic/open-mower-base as fetch
+FROM tazlogic/open-mower-base AS fetch
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -13,7 +13,7 @@ WORKDIR /opt/open_mower_ros
 # If the package list is the same as last time, the apt install step is cached as well which saves a lot of time.
 # Since the list gets sorted, it will be the same each time and the cache will know that by file checksum in the COPY command.
 # We can't use this stage as base for the next, because this stage is run every time and would therefore invalidate the cache of the next stage.
-FROM fetch as dependencies
+FROM fetch AS dependencies
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -49,7 +49,7 @@ RUN rm -rf /opt/open_mower_ros/src/lib/slic3r_coverage_planner /apt-install_list
 
 WORKDIR /opt/open_mower_ros
 
-RUN bash -c "source /opt/ros/$ROS_DISTRO/setup.bash && cd /opt/open_mower_ros/src && catkin_init_workspace && cd .. && source /opt/prebuilt/slic3r_coverage_planner/setup.bash && catkin_make -DCATKIN_BLACKLIST_PACKAGES=slic3r_coverage_planner"
+RUN bash -c "source /opt/ros/$ROS_DISTRO/setup.bash && cd /opt/open_mower_ros/src && cd .. && source /opt/prebuilt/slic3r_coverage_planner/setup.bash && catkin_make -DCATKIN_BLACKLIST_PACKAGES=slic3r_coverage_planner"
 
 COPY .github/assets/openmower_entrypoint.sh /openmower_entrypoint.sh
 COPY .github/assets/start.sh /start.sh
