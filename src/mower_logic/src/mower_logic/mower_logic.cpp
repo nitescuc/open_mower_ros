@@ -31,6 +31,7 @@
 #include "nav_msgs/Odometry.h"
 #include "nav_msgs/Path.h"
 #include "tf2_geometry_msgs/tf2_geometry_msgs.h"
+#include <tf2_ros/transform_listener.h>
 #include "mower_msgs/Status.h"
 #include "actionlib/client/simple_client_goal_state.h"
 #include "mower_msgs/MowerControlSrv.h"
@@ -43,21 +44,25 @@
 #include "behaviors/AreaRecordingBehavior.h"
 #include "mower_msgs/HighLevelControlSrv.h"
 #include "std_msgs/String.h"
+#include "std_msgs/Bool.h"
 #include "mower_msgs/HighLevelStatus.h"
 #include "mower_msgs/StartInAreaSrv.h"
 #include "mower_map/ClearMapSrv.h"
 #include "xbot_msgs/AbsolutePose.h"
 #include "xbot_positioning/GPSControlSrv.h"
+#include "mower_utils/GPSControlSrv.h"
 #include "xbot_positioning/GPSEnableFloatRtkSrv.h"
 #include "xbot_positioning/SetPoseSrv.h"
-#include "xbot_positioning/CalibrateGyroSrv.h"
 #include "xbot_msgs/RegisterActionsSrv.h"
 #include "sensor_msgs/Range.h"
 #include <mutex>
 #include <atomic>
+#include "std_srvs/SetBool.h"
+#include "robot_localization/SetPose.h"
 
-ros::ServiceClient pathClient, mapClient, dockingPointClient, gpsClient, gpsFloatRtkClient, calibrateGyroClient, mowClient;
-ros::ServiceClient emergencyClient, pathProgressClient, setNavPointClient, clearNavPointClient, clearMapClient, positioningClient, actionRegistrationClient;
+ros::ServiceClient pathClient, mapClient, dockingPointClient, gpsClient, gpsFloatRtkClient, gpsClient2, mowClient;
+ros::ServiceClient emergencyClient, pathProgressClient, setNavPointClient, clearNavPointClient, clearMapClient, positioningClient, positioningClientMap, positioningClientOdom; 
+ros::ServiceClient actionRegistrationClient, hectorMapperPauseClient, lidarControlClient;
 
 ros::NodeHandle *n;
 ros::NodeHandle *paramNh;
@@ -66,13 +71,15 @@ dynamic_reconfigure::Server<mower_logic::MowerLogicConfig> *reconfigServer;
 actionlib::SimpleActionClient<mbf_msgs::MoveBaseAction> *mbfClient;
 actionlib::SimpleActionClient<mbf_msgs::ExePathAction> *mbfClientExePath;
 
-ros::Publisher cmd_vel_pub, high_level_state_publisher;
+ros::Publisher cmd_vel_pub, high_level_state_publisher, amcl_initial_publisher;
 mower_logic::MowerLogicConfig last_config;
 
 
 // store some values for safety checks
 ros::Time pose_time(0.0);
 xbot_msgs::AbsolutePose last_pose;
+nav_msgs::Odometry last_odometry;
+ros::Time last_filter_init(0.0), last_fixed_gps(0.0), last_float_gps(0.0), last_good_odometry(0.0), last_amcl_init(0.0);
 ros::Time status_time(0.0);
 mower_msgs::Status last_status;
 
@@ -88,6 +95,12 @@ std::atomic<bool> gpsEnabled;
 
 Behavior *currentBehavior = &IdleBehavior::INSTANCE;
 
+bool hasMapper = false;
+bool hasLidar = false;
+bool mapperRunning = true;
+bool isEmergency = false;
+
+tf2_ros::Buffer tfBuffer;
 
 /**
  * Some thread safe methods to get a copy of the logic state
@@ -129,6 +142,10 @@ xbot_msgs::AbsolutePose getPose() {
     return last_pose;
 }
 
+nav_msgs::Odometry getOdometry() {
+    std::lock_guard<std::recursive_mutex> lk{mower_logic_mutex};
+    return last_odometry;
+}
 
 
 void setEmergencyMode(bool emergency);
@@ -157,22 +174,38 @@ void setRobotPose(geometry_msgs::Pose &pose) {
         last_pose.pose.pose = pose;
     }
 
-    xbot_positioning::SetPoseSrv pose_srv;
-    pose_srv.request.robot_pose = pose;
-
     ros::Rate retry_delay(1);
-    bool success = false;
+    bool success1 = true, success2 = false, success3 = false;
+    robot_localization::SetPose loc_pose_srv;
+    loc_pose_srv.request.pose.pose.pose = pose;
+    loc_pose_srv.request.pose.pose.covariance[0] = 0.01;
+    loc_pose_srv.request.pose.pose.covariance[7] = 0.01;
+    loc_pose_srv.request.pose.pose.covariance[14] = 0.01;
+    loc_pose_srv.request.pose.pose.covariance[21] = 0.01;
+    loc_pose_srv.request.pose.pose.covariance[28] = 0.01;
+    // orientation covariance is incertain in this case because very often this message is received when the robot recovers GPS
+    // and the orientation is not yet accurate because the robot is not moving. So we set it to a high value.
+    loc_pose_srv.request.pose.pose.covariance[35] = 1000.0;
+    loc_pose_srv.request.pose.header.frame_id = "map";
     for(int i = 0; i < 10; i++) {
-        if(positioningClient.call(pose_srv)) {
-//            ROS_INFO_STREAM("successfully set pose to " << pose);
-            success = true;
+        if(positioningClientMap.call(loc_pose_srv)) {
+            success2 = true;
             break;
         }
-        ROS_ERROR_STREAM("Error setting robot pose to " << pose << ". Retrying.");
+        ROS_ERROR_STREAM("Error setting robot pose (map) to " << pose << ". Retrying.");
+        retry_delay.sleep();
+    }
+    loc_pose_srv.request.pose.header.frame_id = "odom";
+    for(int i = 0; i < 10; i++) {
+        if(positioningClientOdom.call(loc_pose_srv)) {
+            success3 = true;
+            break;
+        }
+        ROS_ERROR_STREAM("Error setting robot pose (odom) to " << pose << ". Retrying.");
         retry_delay.sleep();
     }
 
-    if(!success) {
+    if(!success1 || !success2 || !success3) {
         ROS_ERROR_STREAM("Error setting robot pose. Going to emergency. THIS SHOULD NEVER HAPPEN");
         setEmergencyMode(true);
     }
@@ -209,6 +242,41 @@ void setRobotPoseDocked() {
     r.sleep();
 }
 
+
+void gpsPoseReceived(const xbot_msgs::AbsolutePose::ConstPtr &msg) {
+    // throttle
+    if (!gpsEnabled) {
+        return;
+    }
+    if ((msg->flags & xbot_msgs::AbsolutePose::FLAG_GPS_RTK_FIXED) == xbot_msgs::AbsolutePose::FLAG_GPS_RTK_FIXED) {
+        // when the state has not been updated for a while, the GPS was probably turned off and both float and fixed times are way off
+        // in this case we should assume that gps has not been fixed for long enough and we init last_float_gps
+        if ((ros::Time::now() - last_fixed_gps).toSec() > 10.0) {
+            last_float_gps = ros::Time::now();
+        }
+        last_fixed_gps = ros::Time::now();
+        std::lock_guard<std::recursive_mutex> lk{mower_logic_mutex};
+        // manage kidnapped robot problem: GPS is fixed but the filter's covariance is too high
+        if (last_good_odometry < ros::Time::now() - ros::Duration(10.0)) {
+            // the filter has been reinit recently, let it converge
+            if (ros::Time::now() - last_filter_init < ros::Duration(5.0)) {
+                return;
+            }
+            // the GPS fix should be stable
+            if (ros::Time::now() - last_float_gps < ros::Duration(10.0)) {
+                ROS_WARN_STREAM_THROTTLE(1.0, "om_mower_logic: filter out of sync, waiting for GPS to be fixed for more that 10 seconds (now fixed for " << (ros::Time::now() - last_float_gps).toSec() << "s)");
+                return;
+            }
+            ROS_WARN_STREAM("om_mower_logic: GPS is good but the filter is out of sync. Last good odometry: " << last_good_odometry << ". Resetting the filter (" << msg->flags << ")");
+            geometry_msgs::Pose pose = msg->pose.pose;
+            setRobotPose(pose);
+            last_filter_init = ros::Time::now();
+        }
+    } else {
+        last_float_gps = ros::Time::now();
+    }
+}
+
 void poseReceived(const xbot_msgs::AbsolutePose::ConstPtr &msg) {
     std::lock_guard<std::recursive_mutex> lk{mower_logic_mutex};
 
@@ -218,6 +286,16 @@ void poseReceived(const xbot_msgs::AbsolutePose::ConstPtr &msg) {
     ROS_INFO("om_mower_logic: pose received with accuracy %f", last_pose.position_accuracy);
 #endif
     pose_time = ros::Time::now();
+}
+
+void odomReceived(const nav_msgs::Odometry::ConstPtr &msg) {
+    std::lock_guard<std::recursive_mutex> lk{mower_logic_mutex};
+
+    last_odometry = *msg;
+
+    if (last_odometry.pose.covariance[0] < last_config.gps_max_covariance && last_odometry.pose.covariance[7] < last_config.gps_max_covariance) {
+        last_good_odometry = ros::Time::now();
+    }
 }
 
 void statusReceived(const mower_msgs::Status::ConstPtr &msg) {
@@ -240,27 +318,35 @@ void abortExecution() {
 bool setGPS(bool enabled) {
     xbot_positioning::GPSControlSrv gps_srv;
     gps_srv.request.gps_enabled = enabled;
+    mower_utils::GPSControlSrv gps_srv2;
+    gps_srv2.request.gps_enabled = enabled;
 
     ros::Rate retry_delay(1);
-    bool success = false;
+    bool success = false, success2 = false;
     for(int i = 0; i < 10; i++) {
-        if(gpsClient.call(gps_srv)) {
+        if(!success && gpsClient.call(gps_srv)) {
             ROS_INFO_STREAM("successfully set GPS to " << enabled);
             success = true;
+        }
+        if (!success2 && gpsClient2.call(gps_srv2)) {
+            ROS_INFO_STREAM("successfully set GPS2 to " << enabled);
+            success2 = true;
+        }
+        if(success && success2) {
             break;
         }
         ROS_ERROR_STREAM("Error setting GPS to " << enabled << ". Retrying.");
         retry_delay.sleep();
     }
 
-    if(!success) {
+    if(!success || !success2) {
         ROS_ERROR_STREAM("Error setting GPS. Going to emergency. THIS SHOULD NEVER HAPPEN");
         setEmergencyMode(true);
     }
 
     gpsEnabled = enabled;
 
-    return success;
+    return success && success2;
 }
 
 
@@ -293,12 +379,6 @@ bool setGPSRtkFloat(bool enabled) {
 
     return success;
 }
-
-bool calibrateGyro() {
-    xbot_positioning::CalibrateGyroSrv calibrate_srv;
-    calibrateGyroClient.call(calibrate_srv);
-}
-
 
 /// @brief If the BLADE Motor is not in the requested status (enabled),we call the 
 ///        the mower_service/mow_enabled service to enable/disable. TODO: get feedback about spinup and delay if needed
@@ -373,6 +453,40 @@ bool setMowerEnabled(bool enabled)
 }
 
 
+void setMapperEnabled(bool enabled) {
+    if (enabled && hasMapper && !mapperRunning) {
+        ROS_INFO_STREAM_THROTTLE(10, "om_mower_logic: setMapperEnabled(" << enabled << ")");
+        std_srvs::SetBool pause_srv;
+        pause_srv.request.data = false;
+        hectorMapperPauseClient.call(pause_srv);
+        mapperRunning = true;
+    }
+    else if (!enabled && hasMapper && mapperRunning) {
+        ROS_INFO_STREAM_THROTTLE(10, "om_mower_logic: setMapperEnabled(" << enabled << ")");
+        std_srvs::SetBool pause_srv;
+        pause_srv.request.data = true;
+        hectorMapperPauseClient.call(pause_srv);
+        mapperRunning = false;
+    }
+}
+
+void setLidarEnabled(bool enabled) {
+    if (hasLidar) {
+        ROS_INFO_STREAM_THROTTLE(10, "om_mower_logic: setLidarEnabled(" << enabled << ")");
+        std_srvs::SetBool lidar_srv;
+        lidar_srv.request.data = enabled;
+        lidarControlClient.call(lidar_srv);
+        // set initial position of amcl to the current position
+        if (enabled) {
+            geometry_msgs::PoseWithCovarianceStamped pose;
+            pose.header.frame_id = "map";
+            pose.header.stamp = ros::Time::now();
+            pose.pose = last_odometry.pose;
+            amcl_initial_publisher.publish(pose);
+            last_amcl_init = ros::Time::now();
+        }
+    }
+}
 
 /// @brief Halt all bot movement
 void stopMoving() {
@@ -381,6 +495,8 @@ void stopMoving() {
     stop.angular.z = 0;
     stop.linear.x = 0;
     cmd_vel_pub.publish(stop);
+    // should not continue mapping
+    setMapperEnabled(false);
 }
 
 /// @brief If the BLADE motor is currently enabled, we stop it
@@ -395,12 +511,24 @@ void stopBlade()
 }
 
 
+bool isEmergencyMode() {
+    std::lock_guard<std::recursive_mutex> lk{mower_logic_mutex};
+    return isEmergency;
+}
+
+
 /// @brief Stop BLADE motor and any movement
 /// @param emergency 
 void setEmergencyMode(bool emergency) 
 {
-    stopBlade();
-    stopMoving();
+    if (isEmergencyMode() == emergency) {
+        return;
+    }
+
+    if (emergency) {
+        stopBlade();
+        stopMoving();
+    }
     mower_msgs::EmergencyStopSrv emergencyStop;
     emergencyStop.request.emergency = emergency;
 
@@ -420,6 +548,8 @@ void setEmergencyMode(bool emergency)
         ROS_ERROR_STREAM("Error setting emergency. THIS SHOULD NEVER HAPPEN");
     }
 
+    std::lock_guard<std::recursive_mutex> lk{mower_logic_mutex};
+    isEmergency = emergency;
 }
 
 void updateUI(const ros::TimerEvent &timer_event) {
@@ -440,7 +570,8 @@ bool isGpsGood() {
     std::lock_guard<std::recursive_mutex> lk{mower_logic_mutex};
     // GPS is good if orientation is valid, we have low accuracy and we have a recent GPS update.
     // TODO: think about the "recent gps flag" since it only looks at the time. E.g. if we were standing still this would still pause even if no GPS updates are needed during standstill.
-    return last_pose.orientation_valid && last_pose.position_accuracy < last_config.max_position_accuracy && (last_pose.flags & xbot_msgs::AbsolutePose::FLAG_SENSOR_FUSION_RECENT_ABSOLUTE_POSE);
+    return last_pose.orientation_valid && last_pose.position_accuracy < last_config.max_position_accuracy && (last_pose.flags & xbot_msgs::AbsolutePose::FLAG_SENSOR_FUSION_RECENT_ABSOLUTE_POSE)
+        && last_odometry.pose.covariance[0] < last_config.gps_max_covariance;
 }
 
 /// @brief Called every 0.5s, used to control BLADE motor via mower_enabled variable and stop any movement in case of /odom and /mower/status outages
@@ -448,7 +579,8 @@ bool isGpsGood() {
 void checkSafety(const ros::TimerEvent &timer_event) {
     const auto last_status = getStatus();
     const auto last_config = getConfig();
-    const auto last_pose = getPose();
+    // const auto last_pose = getPose();
+    const auto last_odometry = getOdometry();
     const auto pose_time = getPoseTime();
     const auto status_time = getStatusTime();
     const auto last_good_gps = getLastGoodGPS();
@@ -502,6 +634,7 @@ void checkSafety(const ros::TimerEvent &timer_event) {
     if(last_status.emergency) {
         if(currentBehavior == &MowingBehavior::INSTANCE) {
             setEmergencyMode(true);
+            // currentBehavior->requestPause();
             should_enable_mower = false;
         } else if(currentBehavior != &AreaRecordingBehavior::INSTANCE && currentBehavior != &IdleBehavior::INSTANCE) {
             abortExecution();
@@ -510,6 +643,7 @@ void checkSafety(const ros::TimerEvent &timer_event) {
             // emergency and docked and idle or area recording, so it's safe to reset the emergency mode, reset it. It's safe since we won't start moving in this mode.
             setEmergencyMode(false);
         }
+        return;
     }
 
     // We need orientation and a positional accuracy less than configured
@@ -517,6 +651,7 @@ void checkSafety(const ros::TimerEvent &timer_event) {
     if (gpsGoodNow || last_config.ignore_gps_errors) {
         setLastGoodGPS(ros::Time::now());
         high_level_status.gps_quality_percent = 1.0 - fmin(1.0, last_pose.position_accuracy / last_config.max_position_accuracy);
+        high_level_status.gps_quality_percent = fmin(1.0, last_odometry.pose.covariance[0] / last_config.gps_max_covariance);
         ROS_INFO_STREAM_THROTTLE(10, "GPS quality: " << high_level_status.gps_quality_percent);
     } else {
         // GPS = bad, set quality to 0
@@ -533,10 +668,13 @@ void checkSafety(const ros::TimerEvent &timer_event) {
     if(gpsTimeout) {
         // GPS = bad, set quality to 0
         high_level_status.gps_quality_percent = 0;
-        if (gpsEnabled) ROS_WARN_STREAM_THROTTLE(1,"GPS timeout");
+        if (gpsEnabled) ROS_WARN_STREAM_THROTTLE(1,"mower_logic: GPS timeout");
     }
 
     if (currentBehavior != nullptr && currentBehavior->needs_gps()) {
+        if (gpsTimeout) {
+            ROS_WARN_STREAM_THROTTLE(1, "mower_logic: GPS needed for current behavior, managing gps timeout: " << gpsTimeout);
+        }
         // Stop the mower
         if(gpsTimeout) {
             stopBlade();
@@ -548,6 +686,15 @@ void checkSafety(const ros::TimerEvent &timer_event) {
 
     // call the mower
     setMowerEnabled(should_enable_mower && currentBehavior != nullptr && currentBehavior->mower_enabled());
+
+    // here, we shouldn't be in emergency mode anymore
+    setEmergencyMode(false);
+
+    // all good, enable mapper
+    if (currentBehavior == &MowingBehavior::INSTANCE) {
+        // currentBehavior->requestContinue();
+        setMapperEnabled(isGpsGood());
+    }
 
     double battery_percent = (last_status.v_battery - last_config.battery_empty_voltage) / (last_config.battery_full_voltage - last_config.battery_empty_voltage);
     if(battery_percent > 1.0) {
@@ -684,6 +831,7 @@ int main(int argc, char **argv) {
 
     path_pub = n->advertise<nav_msgs::Path>("mower_logic/mowing_path", 100, true);
     high_level_state_publisher = n->advertise<mower_msgs::HighLevelStatus>("mower_logic/current_state", 100, true);
+    amcl_initial_publisher = n->advertise<geometry_msgs::PoseWithCovarianceStamped>("/amcl_initial", 1, true);
 
     pathClient = n->serviceClient<slic3r_coverage_planner::PlanPath>(
             "slic3r_coverage_planner/plan_path");
@@ -694,12 +842,16 @@ int main(int argc, char **argv) {
 
     gpsClient = n->serviceClient<xbot_positioning::GPSControlSrv>(
             "xbot_positioning/set_gps_state");
+    gpsClient2 = n->serviceClient<mower_utils::GPSControlSrv>(
+            "odom_converter/set_gps_state");
     gpsFloatRtkClient = n->serviceClient<xbot_positioning::GPSEnableFloatRtkSrv>(
             "xbot_positioning/set_float_rtk_enabled");
-    calibrateGyroClient = n->serviceClient<xbot_positioning::CalibrateGyroSrv>(
-            "xbot_positioning/calibrate_gyro");
     positioningClient = n->serviceClient<xbot_positioning::SetPoseSrv>(
             "xbot_positioning/set_robot_pose");
+    positioningClientMap = n->serviceClient<robot_localization::SetPose>(
+            "odometry_map/set_pose");
+    positioningClientOdom = n->serviceClient<robot_localization::SetPose>(
+            "odometry_odom/set_pose");
     actionRegistrationClient = n->serviceClient<xbot_msgs::RegisterActionsSrv>(
             "xbot/register_actions");
 
@@ -720,6 +872,11 @@ int main(int argc, char **argv) {
     clearNavPointClient = n->serviceClient<mower_map::ClearNavPointSrv>(
             "mower_map_service/clear_nav_point");
 
+    hectorMapperPauseClient = n->serviceClient<std_srvs::SetBool>(
+            "/pause_mapping");
+
+    lidarControlClient = n->serviceClient<std_srvs::SetBool>(
+            "lidar_control/enable_lidar");
 
 
     mbfClient = new actionlib::SimpleActionClient<mbf_msgs::MoveBaseAction>("/move_base_flex/move_base");
@@ -728,6 +885,8 @@ int main(int argc, char **argv) {
 
     ros::Subscriber status_sub = n->subscribe("/mower/status", 0, statusReceived, ros::TransportHints().tcpNoDelay(true));
     ros::Subscriber pose_sub = n->subscribe("/xbot_positioning/xb_pose", 0, poseReceived, ros::TransportHints().tcpNoDelay(true));
+    ros::Subscriber gps_pose_sub = n->subscribe("/xbot_driver_gps/xb_pose", 0, gpsPoseReceived, ros::TransportHints().tcpNoDelay(true));
+    ros::Subscriber odom_sub = n->subscribe("/odometry_map/filtered", 0, odomReceived, ros::TransportHints().tcpNoDelay(true));
     ros::Subscriber joy_cmd = n->subscribe("/joy_vel", 0, joyVelReceived, ros::TransportHints().tcpNoDelay(true));
     ros::Subscriber action = n->subscribe("xbot/action", 0, actionReceived, ros::TransportHints().tcpNoDelay(true));
     ros::Subscriber bumper_left = n->subscribe("/bumper/left", 0, bumperReceived, ros::TransportHints().tcpNoDelay(true));
@@ -739,6 +898,8 @@ int main(int argc, char **argv) {
 
     ros::AsyncSpinner asyncSpinner(1);
     asyncSpinner.start();
+
+    tf2_ros::TransformListener tfListener(tfBuffer);
 
     ros::Rate r(1.0);
 
@@ -805,6 +966,14 @@ int main(int argc, char **argv) {
 
         return 1;
     }
+    if (!gpsClient2.waitForExistence(ros::Duration(60.0, 0.0))) {
+        ROS_ERROR("GPS2 service not found.");
+        delete (reconfigServer);
+        delete (mbfClient);
+        delete (mbfClientExePath);
+
+        return 1;
+    }
     ROS_INFO("Waiting for gps float rtk service");
     if (!gpsFloatRtkClient.waitForExistence(ros::Duration(60.0, 0.0))) {
         ROS_ERROR("GPS float rtk service not found.");
@@ -817,6 +986,22 @@ int main(int argc, char **argv) {
     ROS_INFO("Waiting for positioning service");
     if (!positioningClient.waitForExistence(ros::Duration(60.0, 0.0))) {
         ROS_ERROR("positioning service not found.");
+        delete (reconfigServer);
+        delete (mbfClient);
+        delete (mbfClientExePath);
+
+        return 1;
+    }
+    if (!positioningClientMap.waitForExistence(ros::Duration(60.0, 0.0))) {
+        ROS_ERROR("positioning service (map) not found.");
+        delete (reconfigServer);
+        delete (mbfClient);
+        delete (mbfClientExePath);
+
+        return 1;
+    }
+    if (!positioningClientOdom.waitForExistence(ros::Duration(60.0, 0.0))) {
+        ROS_ERROR("positioning service (odom) not found.");
         delete (reconfigServer);
         delete (mbfClient);
         delete (mbfClientExePath);
@@ -874,6 +1059,26 @@ int main(int argc, char **argv) {
         delete (mbfClient);
         delete (mbfClientExePath);
         return 3;
+    }
+
+    ROS_INFO("Waiting for hector mapping pause server");
+    hasMapper = true;
+    if (!hectorMapperPauseClient.waitForExistence(ros::Duration(5.0, 0.0))) {
+        ROS_WARN("HectorMapper pause server not found.");
+        hasMapper = false;
+    }
+    if (hasMapper) {
+        setMapperEnabled(false);
+    }
+
+    ROS_INFO("Waiting for lidar control server");
+    hasLidar = true;
+    if (!lidarControlClient.waitForExistence(ros::Duration(5.0, 0.0))) {
+        ROS_WARN("Lidar Control server not found.");
+        hasLidar = false;
+    }
+    if (hasLidar) {
+        setLidarEnabled(false);
     }
 
     ros::Time started = ros::Time::now();

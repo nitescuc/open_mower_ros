@@ -1,12 +1,31 @@
 <launch>
     <include file="$(find open_mower)/launch/include/_comms.launch"/>
     <include file="$(find open_mower)/launch/include/_move_base.launch"/>
-    <include file="$(find open_mower)/launch/include/_localization.launch"/>
+    <include file="$(find open_mower)/launch/include/_localization.launch">
+        <arg name="odom_frame_id" value="odom"/>
+        <arg name="pub_initialpose_seconds" unless="$(eval env('OM_SLAM')=='amcl')" value="$(env OM_GPS_PUB_INITIAL_POSE_SEC)"/>
+        <arg name="pub_initialpose_seconds" if="$(eval env('OM_SLAM')=='hector')" value="0.0"/>
+        <arg name="slam_covariance_coef" if="$(eval env('OM_SLAM')=='hector')" value="$(env OM_GPS_SLAM_COVARIANCE_COEF_HECTOR)"/>
+        <arg name="slam_covariance_coef" if="$(eval env('OM_SLAM')=='amcl')" value="$(env OM_GPS_SLAM_COVARIANCE_COEF_AMCL)"/>
+        <arg name="slam_pose_in" if="$(eval env('OM_SLAM')=='hector')" value="/poseupdate"/>
+        <arg name="slam_pose_in" if="$(eval env('OM_SLAM')=='amcl')" value="/amcl_pose"/>
+        <arg name="pub_odom_transform" value="$(eval env('OM_SLAM')=='none')"/>
+        <arg name="always_pub_map_transform" value="$(eval env('OM_SLAM')=='none')"/>
+        <arg name="max_gps_accuracy" if="$(eval env('OM_SLAM')=='none')" value="$(env OM_GPS_MAX_ACCURACY)"/>
+        <arg name="max_gps_accuracy" unless="$(eval env('OM_SLAM')=='none')" value="1.0"/>
+    </include>
     <include file="$(find open_mower)/launch/include/_teleop.launch"/>
     <include file="$(find open_mower)/launch/include/_record.launch">
         <arg name="prefix" value="mow_area"/>
     </include>
     <include file="$(find open_mower)/launch/include/_rosbridge.launch"/>
+<!--    <include file="$(find open_mower)/launch/include/_slam.launch">
+        <arg name="always_pub_map_transform" value="false"/>
+        <arg name="control_lidar" value="true"/>
+        <arg name="use_hector_mapping" value="false"/>
+    </include>
+-->
+    <include if="$(eval env('OM_SLAM')!='none')" file="$(find open_mower)/launch/include/_ekf.launch" />
 
     <node pkg="mower_map" type="mower_map_service" name="map_service" output="screen"/>
     <node pkg="mower_logic" type="mower_logic" name="mower_logic" output="screen">
@@ -30,8 +49,10 @@
         <param name="motor_cold_temperature" value="$(env OM_MOWING_MOTOR_TEMP_LOW)"/>
         <param name="mow_direction_reverse_areas" value="$(env OM_MOWING_MOW_DIRECTION_REVERSE_AREAS)"/>
         <param name="mow_direction_inner_first_areas" value="$(env OM_MOWING_MOW_DIRECTION_INNER_FIRST_AREAS)"/>
+        <param name="lidar_enabled_areas" value="$(env OM_MOWING_LIDAR_ENABLED_AREAS)"/>
         <param name="gps_wait_time" value="$(env OM_GPS_WAIT_TIME_SEC)"/>
         <param name="gps_timeout" value="$(env OM_GPS_TIMEOUT_SEC)"/>
+        <param name="gps_max_covariance" value="$(env OM_GPS_MAX_COVARIANCE)"/>
         <param name="gps_use_fix_point" value="$(env OM_GPS_USE_FIX_POINT)"/>
         <param name="gps_fix_point_x" value="$(env OM_GPS_FIX_POINT_X)"/>
         <param name="gps_fix_point_y" value="$(env OM_GPS_FIX_POINT_Y)"/>
@@ -42,6 +63,7 @@
         <param name="max_first_point_attempts" value="$(env OM_MAX_FIRST_POINT_ATTEMPTS)"/>
         <param name="max_first_point_trim_attempts" value="$(env OM_MAX_FIRST_POINT_TRIM_ATTEMPTS)"/>
         <param name="obstacle_skip_points" value="$(env OM_OBSTACLE_SKIP_POINTS)"/>
+        <param name="mow_controller" value="$(env OM_MOW_CONTROLLER)"/>
     </node>
     <node pkg="slic3r_coverage_planner" type="slic3r_coverage_planner" name="slic3r_coverage_planner" output="screen"/>
 
@@ -70,4 +92,14 @@
     </node>
 
     <node pkg="mower_logic" type="monitoring" name="monitoring" output="screen" respawn="true" respawn_delay="10"/>
+
+    <group if="$(env OM_ENABLE_ROSBAG_SNAPSHOT)">
+        <node pkg="mower_utils" type="snapshot_controller" name="snapshot_controller" output="screen"/>
+        <node pkg="rosbag_snapshot" type="snapshot" name="snapshot" output="screen">
+            <rosparam command="load" file="$(find open_mower)/params/rosbag_snapshot.yaml" />
+        </node>
+    </group>
+    <include if="$(env OM_ENABLE_FOXGLOVE)" file="$(find foxglove_bridge)/launch/foxglove_bridge.launch">
+        <arg name="port" value="8765"/>
+    </include>
 </launch>
