@@ -32,6 +32,7 @@ private:
 
     bool skip_area;
     bool create_mowing_plan(int area_index);
+    void checkLidarEnabled();
 
     bool execute_mowing_plan();
 

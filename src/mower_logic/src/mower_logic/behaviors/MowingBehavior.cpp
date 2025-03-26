@@ -35,11 +35,32 @@ extern void registerActions(std::string prefix, const std::vector<xbot_msgs::Act
 
 extern bool calibrateGyro();
 extern bool setGPSRtkFloat(bool enabled);
+extern void setLidarEnabled(bool enabled);
+
+extern bool isEmergencyMode();
 
 MowingBehavior MowingBehavior::INSTANCE;
 
 std::string MowingBehavior::state_name() {
     return "MOWING";
+}
+
+bool is_area_in_param_list(int area, std::string param) {
+    std::stringstream ss (param);
+    std::string item;
+    while (getline(ss, item, ',')) {
+        if (area == stoi(item)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void MowingBehavior::checkLidarEnabled() {
+    int area = getConfig().current_area;
+    bool lidar_enabled = is_area_in_param_list(area, config.lidar_enabled_areas);
+    ROS_INFO_STREAM("MowingBehavior: Setting lidar to " << lidar_enabled << " for area " << area);
+    setLidarEnabled(lidar_enabled);
 }
 
 Behavior *MowingBehavior::execute() {
@@ -53,6 +74,8 @@ Behavior *MowingBehavior::execute() {
     shared_state->active_semiautomatic_task = true;
 
     while (ros::ok() && !aborted) {
+        checkLidarEnabled();
+
         if (currentMowingPaths.empty() && !create_mowing_plan(getConfig().current_area)) {
             ROS_INFO_STREAM("MowingBehavior: Could not create mowing plan, docking");
             // Start again from first area next time.
@@ -86,7 +109,7 @@ void MowingBehavior::enter() {
     paused = aborted = false;
 
     // recalibrate gyro
-    calibrateGyro();
+    // calibrateGyro();
     // accept less precision when mowing
     setGPSRtkFloat(true);
 
@@ -142,17 +165,6 @@ void MowingBehavior::update_actions() {
     actions[1].enabled = paused && !requested_continue_flag;
 
     registerActions("mower_logic:mowing", actions);
-}
-
-bool is_area_in_param_list(int area, std::string param) {
-    std::stringstream ss (param);
-    std::string item;
-    while (getline(ss, item, ',')) {
-        if (area == stoi(item)) {
-            return true;
-        }
-    }
-    return false;
 }
 
 bool MowingBehavior::create_mowing_plan(int area_index) {
@@ -286,6 +298,7 @@ bool MowingBehavior::execute_mowing_plan() {
     int first_point_attempt_counter = 0;
     int first_point_trim_counter = 0;
     ros::Time paused_time(0.0);
+    auto controller = getConfig().mow_controller;
 
     // loop through all mowingPaths to execute the plan fully.
     while (!currentMowingPaths.empty() && ros::ok() && !aborted) {
@@ -309,9 +322,9 @@ bool MowingBehavior::execute_mowing_plan() {
         {   
             paused_time = ros::Time::now();
             mowerEnabled = false;
-            while (!this->hasGoodGPS())
+            while (!this->hasGoodGPS() || isEmergencyMode())  // wait for /odom to be valid again
             {
-                ROS_INFO_STREAM("MowingBehavior: PAUSED (" << (ros::Time::now()-paused_time).toSec() << "s) (waiting for /odom)");
+                ROS_INFO_STREAM("MowingBehavior: PAUSED (" << (ros::Time::now()-paused_time).toSec() << "s) (waiting for /odom); Emergency mode: " << isEmergencyMode());
                 ros::Rate r(1.0);
                 r.sleep();
             }
@@ -350,7 +363,7 @@ bool MowingBehavior::execute_mowing_plan() {
 
             mbf_msgs::MoveBaseGoal moveBaseGoal;
             moveBaseGoal.target_pose = path.path.poses.front();
-            moveBaseGoal.controller = "FTCPlanner";
+            moveBaseGoal.controller = controller;
             mbfClient->sendGoal(moveBaseGoal);
             sleep(1);
             actionlib::SimpleClientGoalState current_status(actionlib::SimpleClientGoalState::PENDING);
@@ -396,15 +409,23 @@ bool MowingBehavior::execute_mowing_plan() {
                         break;
                     }
                     int index = getCurrentMowPathIndex();
-                    if ((index != old_index) || !this->hasGoodGPS()) {
+                    if (index != old_index) {
                         last_index_time = ros::Time::now();
                         old_index = index;
                     } else {
-                        if ((ros::Time::now() - last_index_time).toSec() > 30.0) {
-                            ROS_ERROR_STREAM("MowingBehavior: (FIRST POINT) - No progress for 30 seconds, stopping path execution.");
-                            mbfClient->cancelAllGoals();
-                            mowerEnabled = false;
-                            break;
+                        if (!this->hasGoodGPS() || isEmergencyMode()) {
+                            if (!this->hasGoodGPS())
+                                ROS_WARN_STREAM_THROTTLE(10, "MowingBehavior: (FIRST POINT) - No GPS signal, waiting.");
+                            if (isEmergencyMode())
+                                ROS_WARN_STREAM_THROTTLE(10, "MowingBehavior: (FIRST POINT) - Emergency mode, waiting.");
+                            last_index_time = ros::Time::now();
+                        } else {
+                            if ((ros::Time::now() - last_index_time).toSec() > 30.0) {
+                                ROS_ERROR_STREAM("MowingBehavior: (FIRST POINT) - No progress for 30 seconds, stopping path execution. HasGoodGPS=" << this->hasGoodGPS());
+                                mbfClient->cancelAllGoals();
+                                mowerEnabled = false;
+                                break;
+                            }
                         }
                     }
                     // show progress
@@ -482,7 +503,7 @@ bool MowingBehavior::execute_mowing_plan() {
             exePathGoal.angle_tolerance = 5.0 * (M_PI / 180.0);
             exePathGoal.dist_tolerance = 0.2;
             exePathGoal.tolerance_from_action = true;
-            exePathGoal.controller = "FTCPlanner";
+            exePathGoal.controller = controller;
 
             ROS_INFO_STREAM("MowingBehavior: (MOW) First point reached - Executing mow path with " << path.path.poses.size() << " poses");            
             mbfClientExePath->sendGoal(exePathGoal);
