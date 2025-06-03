@@ -257,21 +257,21 @@ void gpsPoseReceived(const xbot_msgs::AbsolutePose::ConstPtr &msg) {
         last_fixed_gps = ros::Time::now();
         std::lock_guard<std::recursive_mutex> lk{mower_logic_mutex};
         // manage kidnapped robot problem: GPS is fixed but the filter's covariance is too high
-        if (last_good_odometry < ros::Time::now() - ros::Duration(10.0)) {
-            // the filter has been reinit recently, let it converge
-            if (ros::Time::now() - last_filter_init < ros::Duration(5.0)) {
-                return;
-            }
-            // the GPS fix should be stable
-            if (ros::Time::now() - last_float_gps < ros::Duration(10.0)) {
-                ROS_WARN_STREAM_THROTTLE(1.0, "om_mower_logic: filter out of sync, waiting for GPS to be fixed for more that 10 seconds (now fixed for " << (ros::Time::now() - last_float_gps).toSec() << "s)");
-                return;
-            }
-            ROS_WARN_STREAM("om_mower_logic: GPS is good but the filter is out of sync. Last good odometry: " << last_good_odometry << ". Resetting the filter (" << msg->flags << ")");
-            geometry_msgs::Pose pose = msg->pose.pose;
-            setRobotPose(pose);
-            last_filter_init = ros::Time::now();
-        }
+        // if (last_good_odometry < ros::Time::now() - ros::Duration(10.0)) {
+        //     // the filter has been reinit recently, let it converge
+        //     if (ros::Time::now() - last_filter_init < ros::Duration(5.0)) {
+        //         return;
+        //     }
+        //     // the GPS fix should be stable
+        //     if (ros::Time::now() - last_float_gps < ros::Duration(10.0)) {
+        //         ROS_WARN_STREAM_THROTTLE(1.0, "om_mower_logic: filter out of sync, waiting for GPS to be fixed for more that 10 seconds (now fixed for " << (ros::Time::now() - last_float_gps).toSec() << "s)");
+        //         return;
+        //     }
+        //     ROS_WARN_STREAM("om_mower_logic: GPS is good but the filter is out of sync. Last good odometry: " << last_good_odometry << ". Resetting the filter (" << msg->flags << ")");
+        //     geometry_msgs::Pose pose = msg->pose.pose;
+        //     setRobotPose(pose);
+        //     last_filter_init = ros::Time::now();
+        // }
     } else {
         last_float_gps = ros::Time::now();
     }
@@ -296,6 +296,7 @@ void odomReceived(const nav_msgs::Odometry::ConstPtr &msg) {
     if (last_odometry.pose.covariance[0] < last_config.gps_max_covariance && last_odometry.pose.covariance[7] < last_config.gps_max_covariance) {
         last_good_odometry = ros::Time::now();
     }
+    pose_time = ros::Time::now();
 }
 
 void statusReceived(const mower_msgs::Status::ConstPtr &msg) {
@@ -570,8 +571,10 @@ bool isGpsGood() {
     std::lock_guard<std::recursive_mutex> lk{mower_logic_mutex};
     // GPS is good if orientation is valid, we have low accuracy and we have a recent GPS update.
     // TODO: think about the "recent gps flag" since it only looks at the time. E.g. if we were standing still this would still pause even if no GPS updates are needed during standstill.
-    return last_pose.orientation_valid && last_pose.position_accuracy < last_config.max_position_accuracy && (last_pose.flags & xbot_msgs::AbsolutePose::FLAG_SENSOR_FUSION_RECENT_ABSOLUTE_POSE)
-        && last_odometry.pose.covariance[0] < last_config.gps_max_covariance;
+    //return last_pose.orientation_valid && last_pose.position_accuracy < last_config.max_position_accuracy && (last_pose.flags & xbot_msgs::AbsolutePose::FLAG_SENSOR_FUSION_RECENT_ABSOLUTE_POSE)
+    //    && last_odometry.pose.covariance[0] < last_config.gps_max_covariance;
+    return last_odometry.pose.covariance[0] < last_config.gps_max_covariance && last_odometry.pose.covariance[7] < last_config.gps_max_covariance
+        && (last_good_odometry > ros::Time::now() - ros::Duration(10.0));
 }
 
 /// @brief Called every 0.5s, used to control BLADE motor via mower_enabled variable and stop any movement in case of /odom and /mower/status outages
@@ -650,16 +653,16 @@ void checkSafety(const ros::TimerEvent &timer_event) {
     bool gpsGoodNow = isGpsGood();
     if (gpsGoodNow || last_config.ignore_gps_errors) {
         setLastGoodGPS(ros::Time::now());
-        high_level_status.gps_quality_percent = 1.0 - fmin(1.0, last_pose.position_accuracy / last_config.max_position_accuracy);
+        // high_level_status.gps_quality_percent = 1.0 - fmin(1.0, last_pose.position_accuracy / last_config.max_position_accuracy);
         high_level_status.gps_quality_percent = fmin(1.0, last_odometry.pose.covariance[0] / last_config.gps_max_covariance);
         ROS_INFO_STREAM_THROTTLE(10, "GPS quality: " << high_level_status.gps_quality_percent);
     } else {
         // GPS = bad, set quality to 0
         high_level_status.gps_quality_percent = 0;
-        if(last_pose.orientation_valid) {
-            // set this if we don't even have an orientation
-            high_level_status.gps_quality_percent = -1;
-        }
+        // if(last_pose.orientation_valid) {
+        //     // set this if we don't even have an orientation
+        //     high_level_status.gps_quality_percent = -1;
+        // }
         if (gpsEnabled) ROS_WARN_STREAM_THROTTLE(1,"Low quality GPS");
     }
 
@@ -884,7 +887,7 @@ int main(int argc, char **argv) {
 
 
     ros::Subscriber status_sub = n->subscribe("/mower/status", 0, statusReceived, ros::TransportHints().tcpNoDelay(true));
-    ros::Subscriber pose_sub = n->subscribe("/xbot_positioning/xb_pose", 0, poseReceived, ros::TransportHints().tcpNoDelay(true));
+    // ros::Subscriber pose_sub = n->subscribe("/xbot_positioning/xb_pose", 0, poseReceived, ros::TransportHints().tcpNoDelay(true));
     ros::Subscriber gps_pose_sub = n->subscribe("/xbot_driver_gps/xb_pose", 0, gpsPoseReceived, ros::TransportHints().tcpNoDelay(true));
     ros::Subscriber odom_sub = n->subscribe("/odometry_map/filtered", 0, odomReceived, ros::TransportHints().tcpNoDelay(true));
     ros::Subscriber joy_cmd = n->subscribe("/joy_vel", 0, joyVelReceived, ros::TransportHints().tcpNoDelay(true));

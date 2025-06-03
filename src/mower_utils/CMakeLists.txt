@@ -63,6 +63,7 @@ find_package(catkin REQUIRED COMPONENTS
 add_service_files(
         FILES
         GPSControlSrv.srv
+        SetPoseSrv.srv
 )
 
 ## Generate actions in the 'action' folder
