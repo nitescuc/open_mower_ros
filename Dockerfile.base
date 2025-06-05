@@ -6,7 +6,9 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Europe/Paris
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-RUN apt-get update && \
+RUN apt-get update --allow-insecure-repositories && \
+    apt-get install --yes curl && sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros1-latest-archive-keyring.gpg && \
+    apt-get update && \
     apt-get install --yes git nano wget ros-noetic-map-server ros-noetic-amcl ros-noetic-foxglove-bridge
 RUN echo "deb http://archive.raspberrypi.org/debian/ buster main ui" > /etc/apt/sources.list.d/raspi.list && \
     wget https://archive.raspbian.org/raspbian.public.key -O - | apt-key add - && \

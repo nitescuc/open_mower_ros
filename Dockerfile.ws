@@ -20,13 +20,15 @@ ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /opt/open_mower_ros
 
 # This creates the sorted list of apt-get install commands.
-RUN apt-get update && \
+RUN apt-get update --allow-insecure-repositories && \
+    apt-get install --yes curl && sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros1-latest-archive-keyring.gpg && \
+    apt-get update && \
     rosdep install --from-paths src --ignore-src --simulate | \
     sed --expression '1d' | sort | tr -d '\n' | sed --expression 's/  apt-get install//g' > /apt-install_list
 
 
 # We can't derive this from "dependencies" because "dependencies" will be rebuilt every time, but apt install should only be done if needed
-FROM tazlogic/open-mower-base as assemble
+FROM tazlogic/open-mower-base AS assemble
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -35,7 +37,9 @@ COPY --link --from=tazlogic/open-mower-slic3r /opt/prebuilt/slic3r_coverage_plan
 
 #Fetch the list of packages, this only changes if new dependencies have been added (only sometimes)
 COPY --link --from=dependencies /apt-install_list /apt-install_list
-RUN apt-get update && \
+RUN apt-get update --allow-insecure-repositories && \
+    apt-get install --yes curl && sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros1-latest-archive-keyring.gpg && \
+    apt-get update && \
     apt-get install --no-install-recommends --yes $(cat /apt-install_list) && \
     rm -rf /var/lib/apt/lists/*
 
