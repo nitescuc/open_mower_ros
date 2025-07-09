@@ -81,6 +81,7 @@ xbot_msgs::AbsolutePose last_pose;
 nav_msgs::Odometry last_odometry;
 ros::Time last_filter_init(0.0), last_fixed_gps(0.0), last_float_gps(0.0), last_good_odometry(0.0), last_amcl_init(0.0);
 ros::Time status_time(0.0);
+ros::Time last_bumper_left_nok(0.0), last_bumper_left_ok(0.0), last_bumper_right_nok(0.0), last_bumper_right_ok(0.0);
 mower_msgs::Status last_status;
 
 ros::Time last_good_gps(0.0);
@@ -577,6 +578,26 @@ bool isGpsGood() {
         && (last_good_odometry > ros::Time::now() - ros::Duration(10.0));
 }
 
+bool isBumperStuck() {
+    // check if a bumper is triggered since more than 5 seconds
+    // if so, we enter emergency mode
+    auto now = ros::Time::now();
+    // if (last_bumper_left_ok.isZero() && last_bumper_left_nok.isZero() && last_bumper_right_ok.isZero() && last_bumper_right_nok.isZero()) {
+    //     // no bumper ok received yet, so we don't know if the bumper is stuck
+    //     return false;
+    // }
+    if (last_bumper_left_nok > last_bumper_left_ok && now - last_bumper_left_ok > ros::Duration(5.0)) {
+        ROS_WARN_STREAM_THROTTLE(1, "om_mower_logic: left bumper stuck for more than 5 seconds: " << (now - last_bumper_left_ok).toSec() << "s");
+        return true;
+    }
+    if (last_bumper_right_nok > last_bumper_right_ok && now - last_bumper_right_ok > ros::Duration(5.0)) {
+        ROS_WARN_STREAM_THROTTLE(1, "om_mower_logic: right bumper stuck for more than 5 seconds" << (now - last_bumper_right_ok).toSec() << "s");
+        return true;
+    }
+
+    return false;
+}
+
 /// @brief Called every 0.5s, used to control BLADE motor via mower_enabled variable and stop any movement in case of /odom and /mower/status outages
 /// @param timer_event 
 void checkSafety(const ros::TimerEvent &timer_event) {
@@ -620,6 +641,14 @@ void checkSafety(const ros::TimerEvent &timer_event) {
     {
         setEmergencyMode(true);
         ROS_WARN_STREAM_THROTTLE(5, "om_mower_logic: EMERGENCY /mower/status values stopped. dt was: " << (ros::Time::now() - status_time));
+        return;
+    }
+
+    // check if the bumper is stuck
+    if (isBumperStuck()) {
+        setEmergencyMode(true);
+        ROS_WARN_STREAM_THROTTLE(5, "om_mower_logic: EMERGENCY bumper stuck. dt was: " << (ros::Time::now() - last_bumper_left_ok).toSec() << "s (left), "
+            << (ros::Time::now() - last_bumper_right_ok).toSec() << "s (right)");
         return;
     }
 
@@ -801,9 +830,20 @@ void actionReceived(const std_msgs::String::ConstPtr &action) {
     }
 }
 
-void bumperReceived(const sensor_msgs::Range::ConstPtr &bumper) {
+void bumperLeftReceived(const sensor_msgs::Range::ConstPtr &bumper) {
     if(currentBehavior && bumper->range > bumper->min_range && bumper->range < bumper->max_range) {
+        last_bumper_left_nok = ros::Time::now();
         currentBehavior->requestCrashRecovery();
+    } else {
+        last_bumper_left_ok = ros::Time::now();
+    }
+}
+void bumperRightReceived(const sensor_msgs::Range::ConstPtr &bumper) {
+    if(currentBehavior && bumper->range > bumper->min_range && bumper->range < bumper->max_range) {
+        last_bumper_right_nok = ros::Time::now();
+        currentBehavior->requestCrashRecovery();
+    } else {
+        last_bumper_right_ok = ros::Time::now();
     }
 }
 
@@ -892,8 +932,8 @@ int main(int argc, char **argv) {
     ros::Subscriber odom_sub = n->subscribe("/odometry_map/filtered", 0, odomReceived, ros::TransportHints().tcpNoDelay(true));
     ros::Subscriber joy_cmd = n->subscribe("/joy_vel", 0, joyVelReceived, ros::TransportHints().tcpNoDelay(true));
     ros::Subscriber action = n->subscribe("xbot/action", 0, actionReceived, ros::TransportHints().tcpNoDelay(true));
-    ros::Subscriber bumper_left = n->subscribe("/bumper/left", 0, bumperReceived, ros::TransportHints().tcpNoDelay(true));
-    ros::Subscriber bumper_right = n->subscribe("/bumper/right", 0, bumperReceived, ros::TransportHints().tcpNoDelay(true));
+    ros::Subscriber bumper_left = n->subscribe("/bumper/left", 0, bumperLeftReceived, ros::TransportHints().tcpNoDelay(true));
+    ros::Subscriber bumper_right = n->subscribe("/bumper/right", 0, bumperRightReceived, ros::TransportHints().tcpNoDelay(true));
 
     ros::ServiceServer high_level_control_srv = n->advertiseService("mower_service/high_level_control", highLevelCommand);
     ros::ServiceServer start_in_area_srv = n->advertiseService("mower_service/start_in_area", startInAreaCommand);
