@@ -46,7 +46,7 @@ int gyro_offset_samples;
 double accelerometer_offset;
 bool positioning_initialized = false;
 
-ros::Time last_gps_fixed_time(0.0), last_gps_float_time(0.0);
+ros::Time last_gps_fixed_time(0.0), last_gps_float_time(0.0), last_gps_fully_fixed_time(0.0);
 nav_msgs::Odometry last_odometry;
 ros::Time last_filter_init(0.0), last_good_odometry(0.0);
 
@@ -119,13 +119,9 @@ void onGPS(const xbot_msgs::AbsolutePose::ConstPtr &msg) {
         return;
     }
 
-    double damping = 0.0;
     bool is_fixed = false;
     if ((msg->flags & xbot_msgs::AbsolutePose::FLAG_GPS_RTK_FLOAT) == xbot_msgs::AbsolutePose::FLAG_GPS_RTK_FLOAT) {
         // if it's float since some time now, increase damping factor
-        if (last_gps_fixed_time < last_gps_float_time) {
-            damping = float_damping_factor * (ros::Time::now() - last_gps_fixed_time).toSec();
-        }
         last_gps_float_time = ros::Time::now();
     } else {
         // when the state has not been updated for a while, the GPS was probably turned off and both float and fixed times are way off
@@ -141,6 +137,9 @@ void onGPS(const xbot_msgs::AbsolutePose::ConstPtr &msg) {
         }
         last_gps_fixed_time = ros::Time::now();
     }
+    if (is_fixed) {
+        last_gps_fully_fixed_time = ros::Time::now();
+    }
     // min_position_accuracy is the minimum accuracy of the GPS position in meters, if <= 0.0 it requires RTK_FIXED
     if (min_position_accuracy <= 0.0) {
         if (!is_fixed) {
@@ -148,10 +147,20 @@ void onGPS(const xbot_msgs::AbsolutePose::ConstPtr &msg) {
             return;
         }
     } else {
-        if (msg->position_accuracy > min_position_accuracy || (((ros::Time::now() - last_gps_fixed_time).toSec() > 60.0) && !is_fixed)) {
+        // damping factor should take care of gps missing for too long
+        // if (msg->position_accuracy > min_position_accuracy || (((ros::Time::now() - last_gps_fixed_time).toSec() > 60.0) && !is_fixed)) {
+        if (msg->position_accuracy > min_position_accuracy) {
             ROS_WARN_STREAM_THROTTLE(60, "odom_converter: GPS position accuracy is too low: " << msg->position_accuracy << "; senconds since last fixed:" << (ros::Time::now() - last_gps_fixed_time).toSec());
             return;
         }
+    }
+
+    // compute a damping factor based on the time since the last GPS fix (with a margin so fully fixed)
+    double damping = 0.0;
+    if (!last_gps_fixed_time.isZero()) {
+        damping = float_damping_factor * (ros::Time::now() - last_gps_fully_fixed_time).toSec();
+    } else {
+        damping = float_damping_factor * 60.0; // if the GPS is not fixed, use a high damping factor
     }
 
     tf2::Quaternion q;
@@ -296,7 +305,7 @@ void onWheelTicks(const xbot_msgs::WheelTick::ConstPtr &msg) {
     
     odometry.twist.twist.linear.x = vx;
     odometry.twist.twist.angular.z = angular_speed;
-    odometry.twist.covariance[0] = 0.0001;
+    odometry.twist.covariance[0] = 0.01;
     odometry.twist.covariance[35] = 0.05;
 
     odometry_pub.publish(odometry);
