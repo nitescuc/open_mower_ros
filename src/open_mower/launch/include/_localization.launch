@@ -1,14 +1,27 @@
 <launch>
     <arg name="use_legacy_localization" default="False"/>
+    <arg name="always_pub_map_transform" default="true"/>
+    <arg name="pub_odom_transform" default="true"/>
+    <arg name="odom_frame_id" default="odom"/>
+    <arg name="pub_initialpose_seconds" default="5.0"/>
+    <arg name="slam_covariance_coef" default="10000.0"/>
+    <arg name="slam_pose_in" default="/amcl_pose"/>
+    <arg name="max_gps_accuracy" default="0.5"/>
     <group unless="$(arg use_legacy_localization)">
         <node pkg="xbot_positioning" type="xbot_positioning" name="xbot_positioning" output="screen" required="true">
             <remap from="~imu_in" to="/imu/data_raw"/>
             <remap from="~wheel_ticks_in" to="/mower/wheel_ticks"/>
             <remap from="~xb_pose_in" to="xbot_driver_gps/xb_pose"/>
             <remap from="~xb_pose_out" to="xbot_positioning/xb_pose"/>
-            <param name="max_gps_accuracy" value="$(env OM_GPS_MAX_ACCURACY)"/>
+            <remap from="~slam_pose_in" to="$(arg slam_pose_in)" />
+            <param name="max_gps_accuracy" value="$(arg max_gps_accuracy)"/>
             <param name="antenna_offset_x" value="$(env OM_ANTENNA_OFFSET_X)"/>
             <param name="antenna_offset_y" value="$(env OM_ANTENNA_OFFSET_Y)"/>
+            <param name="pub_initialpose_seconds" value="$(arg pub_initialpose_seconds)" />
+            <param name="pub_map_transform" value="$(arg always_pub_map_transform)"/>
+            <param name="pub_odom_transform" value="$(arg pub_odom_transform)"/>
+            <param name="odom_frame_id" value="odom"/>
+            <param name="slam_covariance_coef" value="$(arg slam_covariance_coef)"/>
         </node>
     </group>
     <group if="$(arg use_legacy_localization)">

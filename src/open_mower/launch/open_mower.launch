@@ -19,14 +19,7 @@
         <arg name="prefix" value="mow_area"/>
     </include>
     <include file="$(find open_mower)/launch/include/_rosbridge.launch"/>
-<!--    <include file="$(find open_mower)/launch/include/_slam.launch">
-        <arg name="always_pub_map_transform" value="false"/>
-        <arg name="control_lidar" value="true"/>
-        <arg name="use_hector_mapping" value="false"/>
-    </include>
--->
     <include if="$(eval env('OM_SLAM')!='none')" file="$(find open_mower)/launch/include/_ekf.launch" />
-
     <node pkg="mower_map" type="mower_map_service" name="map_service" output="screen"/>
     <node pkg="mower_logic" type="mower_logic" name="mower_logic" output="screen">
         <param name="automatic_mode" value="$(optenv OM_AUTOMATIC_MODE 0)"/>
@@ -64,6 +57,7 @@
         <param name="max_first_point_trim_attempts" value="$(env OM_MAX_FIRST_POINT_TRIM_ATTEMPTS)"/>
         <param name="obstacle_skip_points" value="$(env OM_OBSTACLE_SKIP_POINTS)"/>
         <param name="mow_controller" value="$(env OM_MOW_CONTROLLER)"/>
+        <param name="add_fake_obstacle" value="$(env OM_ADD_FAKE_OBSTACLE)"/>
     </node>
     <node pkg="slic3r_coverage_planner" type="slic3r_coverage_planner" name="slic3r_coverage_planner" output="screen"/>
 

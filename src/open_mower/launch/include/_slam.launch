@@ -1,0 +1,23 @@
+<launch>
+    <include file="$(find open_mower)/launch/include/_lidar.launch" />
+
+    <arg name="map_file" default="/root/.ros/map.yaml"/> 
+    <node name="map_server" pkg="map_server" type="map_server" args="$(arg map_file)" />
+
+    <group if="$(eval env('OM_SLAM')=='amcl')">
+        <node pkg="amcl" type="amcl" name="amcl" output="screen">
+            <rosparam file="$(find open_mower)/params/amcl.yaml" command="load" />
+        </node>
+    </group>
+    <arg name="use_hector_mapping" default="true"/>
+    <group if="$(arg use_hector_mapping)">
+        <node pkg="hector_mapping" type="hector_mapping" name="hector_mapping_mapping" output="screen">
+            <rosparam file="$(find open_mower)/params/hector_mapping.yaml" command="load" />
+        </node>
+    </group>
+    <group if="$(eval env('OM_SLAM')=='hector')">
+        <node pkg="hector_mapping" type="hector_mapping" name="hector_mapping_localization" output="screen">
+            <rosparam file="$(find open_mower)/params/hector_localization.yaml" command="load" />
+        </node>
+    </group>
+</launch>

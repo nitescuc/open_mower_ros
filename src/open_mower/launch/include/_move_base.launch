@@ -8,6 +8,7 @@
     <rosparam file="$(find open_mower)/params/global_costmap_params.yaml" command="load" />
     <rosparam file="$(find open_mower)/params/move_base_flex.yaml" command="load"/>
     <rosparam file="$(find open_mower)/params/ftc_local_planner.yaml" command="load" />
+    <rosparam file="$(find open_mower)/params/dwa_local_planner.yaml" command="load" />
     <rosparam file="$(find open_mower)/params/docking_ftc_local_planner.yaml" command="load" />
     <rosparam file="$(find open_mower)/params/global_planner_params.yaml" command="load" />
   </node>
@@ -17,7 +18,5 @@
     <param name="base_global_planner" value="GlobalPlanner" />
   </node>
 --> 
-  <node pkg="tf" type="static_transform_publisher" name="bumper_left_transform_broadcaster" args="0.3 -0.05 0.05 0 0 0 1 base_link bumper_left_link 100" />
-  <node pkg="tf" type="static_transform_publisher" name="bumper_right_transform_broadcaster" args="0.3 0.05 0.05 0 0 0 1 base_link bumper_right_link 100" />
-
+  <include file="$(find open_mower)/launch/include/_phys_transforms.launch" />
 </launch>

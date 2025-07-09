@@ -1,0 +1,5 @@
+<launch>
+    <node pkg="hector_mapping" type="hector_mapping" name="hector_mapping_localization" output="screen">
+        <rosparam file="$(find open_mower)/params/hector_localization.yaml" command="load" />
+    </node>
+</launch>
