@@ -1,0 +1,36 @@
+<launch>
+  <param name="/use_sim_time" value="true"/>
+   <arg name="map_file" default="/home/cristi/map.yaml"/> 
+  <include file="$(find open_mower)/launch/include/_phys_transforms.launch" />
+    <node name="map_server" pkg="map_server" type="map_server" args="$(arg map_file)" />
+
+    <node pkg="mower_utils" type="odometry_converter" name="odom_converter" required="true" output="screen">
+        <param name="cov_factor_pos" value="10.0"/>
+        <param name="cov_factor_ori" value="10.0"/>
+        <param name="cov_factor_float_pos" value="500.0"/>
+        <param name="cov_factor_float_ori" value="500.0"/>
+        <param name="orientation_min_speed" value="0.01"/>
+    </node>
+    <node pkg="topic_tools" type="throttle" name="throttle" args="messages /odom_converter/pose 0.05 /amcl_initial" output="screen" />
+
+    <node pkg="robot_localization" type="ekf_localization_node" name="ekf_localization_odom" output="screen"> 
+        <remap from="odometry/filtered" to="odometry_odom/filtered"/>
+        <remap from="set_pose" to="odometry_odom/set_pose"/>
+        <rosparam command="load" file="$(find open_mower)/params/ekf/robot_localization_odom.yaml" />
+        <rosparam param="initial_state">[1.3,  -0.1,  0.0,
+                                 0.0,  0.0,  4.71,
+                                 0.0,  0.0,  0.0,
+                                 0.0,  0.0,  0.0,
+                                 0.0,  0.0,  0.0]</rosparam> 
+    </node>
+    <node pkg="robot_localization" type="ekf_localization_node" name="ekf_localization_map" output="screen"> 
+        <remap from="odometry/filtered" to="odometry_map/filtered"/>
+        <remap from="set_pose" to="odometry_map/set_pose"/>
+        <rosparam command="load" file="$(find open_mower)/params/ekf/robot_localization_map.yaml" />
+        <rosparam param="initial_state">[1.3,  -0.1,  0.0,
+                                 0.0,  0.0,  4.71,
+                                 0.0,  0.0,  0.0,
+                                 0.0,  0.0,  0.0,
+                                 0.0,  0.0,  0.0]</rosparam> 
+    </node>
+</launch>

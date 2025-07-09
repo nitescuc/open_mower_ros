@@ -1,0 +1,35 @@
+<launch>
+  <param name="/use_sim_time" value="true"/>
+  <node pkg="xbot_positioning" type="xbot_positioning" name="xbot_positioning" output="screen">
+      <remap from="~imu_in" to="/imu/data_raw"/>
+      <remap from="~wheel_ticks_in" to="/mower/wheel_ticks"/>
+      <remap from="~xb_pose_in" to="xbot_driver_gps/xb_pose"/>
+      <remap from="~xb_pose_out" to="xbot_positioning/xb_pose"/>
+      <remap from="~slam_pose_in" to="/amcl_pose" />
+      <param name="/use_sim_time" value="true" />
+      <param name="max_gps_accuracy" value="0.4"/>
+      <param name="antenna_offset_x" value="0.15"/>
+      <param name="antenna_offset_y" value="0"/>
+      <param name="pub_initialpose_seconds" value="1000.0"/>
+      <param name="pub_map_transform" value="false"/>
+      <param name="gps_float_rtk_enabled" value="true"/>
+      <param name="slam_covariance_coef" value="10000.0"/>
+  </node>
+
+  <include file="$(find open_mower)/launch/include/_als.launch">
+    <arg name="scan_name" value="/scan_fixed" /> <!-- sensor_msgs::LaserScan -->
+    <arg name="odom_name" value="/xbot_positioning/odom_out"/>
+    <arg name="laser_frame" value="base_laser"/>
+    <arg name="broadcast_tf" value="false"/>
+    <arg name="scan_step" value="10"/>
+    <arg name="use_gl_pose_sampler" value="false"/>
+    <arg name="publish_unknown_scan" value="false" />
+    <arg name="use_augmented_mcl" default="true" />
+  </include>
+
+  <node pkg="tf" type="static_transform_publisher" name="laser_transform_broadcaster" args="-0.05 0.0 0.25 0 0 0 1 base_link base_laser 100"/>
+  <node pkg="tf" type="static_transform_publisher" name="map_transform_broadcaster" args="0.0 0.0 0.0 0 0 0 1 map odom 100"/>
+  <node pkg="topic_tools" type="transform" name="scan_tranform" args="/scan /scan_fixed sensor_msgs/LaserScan 'sensor_msgs.msg.LaserScan(header=m.header,ranges=numpy.nan_to_num(m.ranges, nan=0.0),intensities=numpy.nan_to_num(m.intensities),angle_min=m.angle_min,angle_max=m.angle_max,angle_increment=m.angle_increment,time_increment=m.time_increment,scan_time=m.scan_time,range_min=m.range_min,range_max=m.range_max)' --import sensor_msgs numpy"/>
+  <arg name="map_file" default="/home/cristi/map.yaml"/> 
+  <node name="map_server" pkg="map_server" type="map_server" args="$(arg map_file)" />
+</launch>

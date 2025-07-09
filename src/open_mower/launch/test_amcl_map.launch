@@ -1,0 +1,61 @@
+<launch>
+  <param name="/use_sim_time" value="true"/>
+  <node pkg="xbot_positioning" type="xbot_positioning" name="xbot_positioning" output="screen">
+      <remap from="~imu_in" to="/imu/data_raw"/>
+      <remap from="~wheel_ticks_in" to="/mower/wheel_ticks"/>
+      <remap from="~xb_pose_in" to="xbot_driver_gps/xb_pose"/>
+      <remap from="~xb_pose_out" to="xbot_positioning/xb_pose"/>
+      <remap from="~slam_pose_in" to="/_amcl_pose" />
+      <param name="max_gps_accuracy" value="0.4"/>
+      <param name="antenna_offset_x" value="0.15"/>
+      <param name="antenna_offset_y" value="0"/>
+      <param name="pub_initialpose_seconds" value="60.0"/>
+      <param name="pub_map_transform" value="false"/>
+      <param name="gps_float_rtk_enabled" value="true"/>
+      <param name="slam_covariance_coef" value="10000.0"/>
+  </node>
+  <node pkg="amcl" type="amcl" name="amcl" output="screen">
+    <!-- Publish scans from best pose at a max of 10 Hz -->
+    <param name="odom_model_type" value="diff-corrected"/>
+    <param name="gui_publish_rate" value="10.0"/>
+    <param name="laser_max_beams" value="150"/>
+    <param name="min_particles" value="500"/>
+    <param name="max_particles" value="1500"/>
+    <param name="kld_err" value="0.01"/>
+    <param name="kld_z" value="0.99"/>
+    <param name="odom_alpha1" value="0.2"/>
+    <param name="odom_alpha2" value="0.2"/>
+    <!-- translation std dev, m -->
+    <param name="odom_alpha3" value="0.2"/>
+    <param name="odom_alpha4" value="0.2"/>
+    <param name="odom_alpha5" value="0.2"/>
+
+    <param name="laser_z_hit" value="0.90"/>
+    <param name="laser_z_rand" value="0.05"/>
+    <param name="laser_z_max" value="0.05"/>
+
+    <param name="laser_z_short" value="0.1"/>
+    <param name="laser_sigma_hit" value="0.2"/>
+    <param name="laser_lambda_short" value="0.1"/>
+    <param name="laser_model_type" value="likelihood_field"/>
+    <param name="laser_likelihood_max_dist" value="6.0"/>
+
+    <param name="update_min_d" value="0.1"/>
+    <param name="update_min_a" value="0.01"/>
+    <param name="odom_frame_id" value="odom"/>
+    <param name="resample_interval" value="1"/>
+    <param name="transform_tolerance" value="0.1"/>
+    <param name="recovery_alpha_slow" value="0.0"/>
+    <param name="recovery_alpha_fast" value="0.0"/>
+
+    <param name="scan" value="/scan_fixed"/>
+    <param name="use_map_topic" value="true"/>
+    <param name="first_map_only" value="true"/>
+    <param name="tf_broadcast" value="false"/>
+  </node>
+  <node pkg="tf" type="static_transform_publisher" name="laser_transform_broadcaster" args="-0.05 0.0 0.25 0 0 0 1 base_link base_laser 100"/>
+  <node pkg="tf" type="static_transform_publisher" name="map_transform_broadcaster" args="0.0 0.0 0.0 0 0 0 1 map odom 100"/>
+  <node pkg="topic_tools" type="transform" name="scan_tranform" args="/scan /scan_fixed sensor_msgs/LaserScan 'sensor_msgs.msg.LaserScan(header=m.header,ranges=numpy.nan_to_num(m.ranges, nan=0.0),intensities=numpy.nan_to_num(m.intensities),angle_min=m.angle_min,angle_max=m.angle_max,angle_increment=m.angle_increment,time_increment=m.time_increment,scan_time=m.scan_time,range_min=m.range_min,range_max=m.range_max)' --import sensor_msgs numpy"/>
+  <arg name="map_file" default="/home/cristi/map.yaml"/> 
+  <node name="map_server" pkg="map_server" type="map_server" args="$(arg map_file)" />
+</launch>
