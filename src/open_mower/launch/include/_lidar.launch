@@ -1,8 +1,6 @@
 <launch>
-    <arg name="always_pub_map_transform" default="true"/>
     <arg name="control_lidar" default="true"/>
     <node name="lidar_control" pkg="lidar_control" type="lidar_control" output="screen">
-        <param name="always_pub_map_transform" value="$(arg always_pub_map_transform)"/>
         <param name="control_lidar" value="$(arg control_lidar)"/>
     </node>
 
@@ -25,10 +23,10 @@
         <!--    1. Enable angle crop fuction: -->
         <!--       1.1. enable angle crop,  example: <param name="enable_angle_crop_func" type="bool" value="true"/> -->
         <!--       1.2. disable angle crop, example: <param name="enable_angle_crop_func" type="bool" value="false"/> -->
-        <param name="enable_angle_crop_func" type="bool" value="false"/>
+        <param name="enable_angle_crop_func" type="bool" value="true"/>
         <!--    2. Angle cropping interval setting, The distance and intensity data within the set angle range will be set to 0 --> 
         <!--       angle >= "angle_crop_min" and angle <= "angle_crop_max", unit is degress -->
-        <param name="angle_crop_min" type="double" value="135.0"/>
-        <param name="angle_crop_max" type="double" value="225.0"/>
+        <param name="angle_crop_min" type="double" value="90.0"/>
+        <param name="angle_crop_max" type="double" value="270.0"/>
     </node>
 </launch>
