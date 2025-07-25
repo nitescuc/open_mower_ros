@@ -1,5 +1,5 @@
 # Get an image with git and apt-get update
-FROM docker.io/ros:noetic-ros-base-focal
+FROM tazlogic/open-mower
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Set timezone
@@ -9,4 +9,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 RUN apt-get update && \
     apt-get install --yes git nano wget ros-noetic-foxglove-bridge
 
-CMD ["roslaunch", "--screen", "foxglove_bridge", "foxglove_bridge.launch", "port:=8765"]
+COPY .github/assets/generic_entrypoint.sh /openmower_entrypoint.sh
+RUN chmod +x /openmower_entrypoint.sh
+
+CMD ["roslaunch", "--screen", "--wait", "foxglove_bridge", "foxglove_bridge.launch", "port:=8765"]
