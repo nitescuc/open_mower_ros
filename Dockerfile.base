@@ -8,32 +8,53 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 RUN apt-get update --allow-insecure-repositories && \
     apt-get install --yes curl && sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros1-latest-archive-keyring.gpg && \
-    apt-get update && \
-    apt-get install --yes git nano wget ros-noetic-map-server ros-noetic-amcl ros-noetic-foxglove-bridge
+    apt-get update  --allow-insecure-repositories && \
+    apt-get install --yes git nano wget ros-noetic-map-server ros-noetic-amcl
 RUN echo "deb http://archive.raspberrypi.org/debian/ buster main ui" > /etc/apt/sources.list.d/raspi.list && \
     wget https://archive.raspbian.org/raspbian.public.key -O - | apt-key add - && \
     wget https://archive.raspberrypi.org/debian/raspberrypi.gpg.key -O - | apt-key add - && \
-    apt update && apt install -y pigpio
-RUN rosdep update
-
+    apt update --allow-insecure-repositories && apt install -y pigpio
+RUN rosdep update --include-eol-distros
 # Install rosserial
 RUN mkdir -p /home/ubuntu/rosserial/src && cd /home/ubuntu/rosserial/src && git clone https://github.com/tongtybj/rosserial && cd rosserial && git checkout rosservice_server
 USER root
 RUN bash -c 'source /opt/ros/noetic/setup.bash && cd /home/ubuntu/rosserial && catkin_make -DCMAKE_INSTALL_PREFIX=/opt/ros/noetic install --only-pkg-with-deps rosserial_server'
 
 # install range_sensor_layer from sources as it isn't available in noetic
-RUN mkdir -p /opt/range_sensor_layer_workspace/src && cd /opt/range_sensor_layer_workspace/src \
+RUN mkdir -p /opt/ws/src && cd /opt/ws/src \
  && git clone https://github.com/DLu/navigation_layers.git && cd navigation_layers && git checkout noetic \
- && cd /opt/range_sensor_layer_workspace \
- && apt-get update && rosdep install --from-paths src --ignore-src --simulate | \
+ && git clone https://github.com/nitescuc/hector_slam.git && cd hector_slam && git checkout cni \
+ && git clone https://github.com/nitescuc/ldlidar_stl_ros.git && cd ldlidar_stl_ros && git checkout cni \
+ && cd /opt/ws \
+ && apt-get update --allow-insecure-repositories && rosdep install --from-paths src --ignore-src --simulate | \
     sed --expression '1d' | sort | tr -d '\n' | sed --expression 's/  apt-get install//g' > apt-install_list && \
     apt-get install --no-install-recommends --yes $(cat apt-install_list) && \
     rm -rf /var/lib/apt/lists/* apt-install_list \
- && bash -c "source /opt/ros/$ROS_DISTRO/setup.bash && cd /opt/range_sensor_layer_workspace && catkin_make -DCMAKE_INSTALL_PREFIX=/opt/ros/$ROS_DISTRO install"
+ && bash -c "source /opt/ros/$ROS_DISTRO/setup.bash && cd /opt/ws && catkin_make -DCMAKE_INSTALL_PREFIX=/opt/ros/$ROS_DISTRO install"
+
+# install hector_slam from sources as it has been personalized
+# RUN mkdir -p /opt/hector_slam_workspace/src && cd /opt/hector_slam_workspace/src \
+#  && git clone https://github.com/nitescuc/hector_slam.git && cd hector_slam && git checkout cni \
+#  && cd /opt/hector_slam_workspace \
+#  && apt-get update --allow-insecure-repositories && rosdep install --from-paths src --ignore-src --simulate | \
+#     sed --expression '1d' | sort | tr -d '\n' | sed --expression 's/  apt-get install//g' > apt-install_list && \
+#     apt-get install --no-install-recommends --yes $(cat apt-install_list) && \
+#     rm -rf /var/lib/apt/lists/* apt-install_list \
+#  && bash -c "source /opt/ros/$ROS_DISTRO/setup.bash && cd /opt/hector_slam_workspace && catkin_make -DCMAKE_INSTALL_PREFIX=/opt/ros/$ROS_DISTRO install"
+
+# # install ldlidar from sources as it has been personalized
+# RUN mkdir -p /opt/ldlidar_workspace/src && cd /opt/ldlidar_workspace/src \
+#  && git clone https://github.com/nitescuc/ldlidar_stl_ros.git && cd ldlidar_stl_ros && git checkout cni \
+#  && cd /opt/ldlidar_workspace \
+#  && apt-get update --allow-insecure-repositories && rosdep install --from-paths src --ignore-src --simulate | \
+#     sed --expression '1d' | sort | tr -d '\n' | sed --expression 's/  apt-get install//g' > apt-install_list && \
+#     apt-get install --no-install-recommends --yes $(cat apt-install_list) && \
+#     rm -rf /var/lib/apt/lists/* apt-install_list \
+#  && bash -c "source /opt/ros/$ROS_DISTRO/setup.bash && cd /opt/ldlidar_workspace && catkin_make -DCMAKE_INSTALL_PREFIX=/opt/ros/$ROS_DISTRO install"
 
 COPY --link ./ /opt/open_mower_ros
 WORKDIR /opt/open_mower_ros
-RUN apt-get update && \
+RUN apt-get update --allow-insecure-repositories && \
     rosdep install --from-paths src --ignore-src --simulate | \
     sed --expression '1d' | sort | tr -d '\n' | sed --expression 's/  apt-get install//g' > /apt-install_list && \
     apt-get install --no-install-recommends --yes $(cat /apt-install_list) && \

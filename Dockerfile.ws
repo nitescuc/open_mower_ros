@@ -38,8 +38,9 @@ COPY --link --from=tazlogic/open-mower-slic3r /opt/prebuilt/slic3r_coverage_plan
 #Fetch the list of packages, this only changes if new dependencies have been added (only sometimes)
 COPY --link --from=dependencies /apt-install_list /apt-install_list
 RUN apt-get update --allow-insecure-repositories && \
-    apt-get install --yes curl && sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros1-latest-archive-keyring.gpg && \
+    apt-get install --yes curl python3-pip && sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros1-latest-archive-keyring.gpg && \
     apt-get update && \
+    pip3 install pyserial && \
     apt-get install --no-install-recommends --yes $(cat /apt-install_list) && \
     rm -rf /var/lib/apt/lists/*
 
