@@ -38,6 +38,13 @@ std::string UndockingBehavior::state_name() {
 }
 
 Behavior *UndockingBehavior::execute() {
+    // set the robot's position to the dock if we're actually docked
+    if(getStatus().v_charge > 5.0) {
+        ROS_INFO_STREAM("Currently inside the docking station, we set the robot's pose to the docks pose.");
+
+        setRobotPoseDocked();
+    }
+    // wait for the filters
     ros::Duration(1.0).sleep();
 
     ROS_INFO("Undocking: getting initial pose from tf");
@@ -151,13 +158,6 @@ Behavior *UndockingBehavior::execute() {
 void UndockingBehavior::enter() {
     reset();
     paused = aborted = false;
-
-    // set the robot's position to the dock if we're actually docked
-    if(getStatus().v_charge > 5.0) {
-        ROS_INFO_STREAM("Currently inside the docking station, we set the robot's pose to the docks pose.");
-
-        setRobotPoseDocked();
-    }
 }
 
 void UndockingBehavior::exit() {
