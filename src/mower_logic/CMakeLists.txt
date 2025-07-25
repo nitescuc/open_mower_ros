@@ -22,7 +22,7 @@ find_package(catkin REQUIRED COMPONENTS
         sensor_msgs
         robot_localization
         xbot_msgs
-        xbot_positioning
+        robot_localization_om
         rosbag
 )
 

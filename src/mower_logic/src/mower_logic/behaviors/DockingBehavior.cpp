@@ -151,11 +151,11 @@ bool DockingBehavior::approach_docking_point() {
             if (!ros::ok() || aborted) {
                 return false;
             }
-            if (!isGPSGood) {
+            if (!isGPSFixed) {
                 start = ros::Time::now();
-                ROS_WARN_STREAM("Waiting for good GPS");
+                ROS_WARN_STREAM("Waiting for fixed GPS");
             } else {
-                ROS_INFO_STREAM("GPS is good");
+                ROS_INFO_STREAM("GPS is fixed");
             }
             ros::Duration(1.0).sleep();
         }

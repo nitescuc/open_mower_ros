@@ -50,6 +50,7 @@ protected:
     std::atomic<bool> requested_crash_recovery_flag;
 
     std::atomic<bool> isGPSGood;
+    std::atomic<bool> isGPSFixed;
     std::atomic<uint8_t> sub_state;
 
     double time_in_state() {
@@ -76,6 +77,11 @@ public:
         return isGPSGood;
     }
 
+    bool hasFixedGPS()
+    {
+        return isGPSFixed;
+    }
+
     void setGoodGPS(bool isGood) {
         if (isGood && !isGPSGood) {
             ROS_INFO_STREAM("bahavior: GPS is now good");
@@ -85,6 +91,15 @@ public:
         isGPSGood = isGood;
     }
 
+    void setFixedGPS(bool isFixed) {
+        if (isFixed && !isGPSFixed) {
+            ROS_INFO_STREAM("bahavior: GPS is now fixed");
+        } else if (!isFixed && isGPSFixed) {
+            ROS_WARN_STREAM("behavior: GPS is now not fixed");
+        }
+        isGPSFixed = isFixed;
+    }
+    
     void requestContinue()
     {
         requested_continue_flag = true;

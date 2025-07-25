@@ -166,11 +166,6 @@ add_executable(xbot_pose_converter
         )
 add_dependencies(xbot_pose_converter ${catkin_EXPORTED_TARGETS} ${${PROJECT_NAME}_EXPORTED_TARGETS})
 target_link_libraries(xbot_pose_converter ${catkin_LIBRARIES})
-add_executable(odometry_converter
-        src/odometry_converter.cpp
-        )
-add_dependencies(odometry_converter ${catkin_EXPORTED_TARGETS} ${${PROJECT_NAME}_EXPORTED_TARGETS})
-target_link_libraries(odometry_converter ${catkin_LIBRARIES})
 add_executable(snapshot_controller
         src/snapshot_controller.cpp
         )

@@ -16,9 +16,18 @@
 [submodule "src/lib/xbot_driver_gps"]
 	path = src/lib/xbot_driver_gps
 	url = https://github.com/nitescuc/xbot_driver_gps.git
-[submodule "src/lib/xbot_positioning"]
-	path = src/lib/xbot_positioning
-	url = https://github.com/nitescuc/xbot_positioning.git
+[submodule "src/lib/amcl_gps"]
+	path = src/lib/amcl_gps
+	url = https://github.com/nitescuc/amcl_gps.git
+[submodule "src/lib/openmower-lidar-control"]
+	path = src/lib/openmower-lidar-control
+	url = https://github.com/nitescuc/openmower-lidar-control.git
+[submodule "src/lib/ros-robot-localization"]
+	path = src/lib/ros-robot-localization
+	url = https://github.com/nitescuc/ros-robot-localization.git
+[submodule "src/lib/ros_imu_bno055"]
+	path = src/lib/ros_imu_bno055
+	url = https://github.com/nitescuc/ros_imu_bno055.git
 [submodule "src/lib/xbot_monitoring"]
 	path = src/lib/xbot_monitoring
 	url = https://github.com/ClemensElflein/xbot_monitoring

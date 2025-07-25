@@ -19,7 +19,7 @@
 // Include messages for mower control
 #include "mower_msgs/Status.h"
 #include "mower_msgs/MowerControlSrv.h"
-#include "xbot_positioning/GPSControlSrv.h"
+//#include "xbot_positioning/GPSControlSrv.h"
 #include "mower_msgs/EmergencyStopSrv.h"
 #include "geometry_msgs/Twist.h"
 #include "geometry_msgs/PoseWithCovarianceStamped.h"
@@ -31,7 +31,7 @@
 #include "nav_msgs/Odometry.h"
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
-#include "xbot_positioning/SetPoseSrv.h"
+//#include "xbot_positioning/SetPoseSrv.h"
 
 ros::Publisher status_pub;
 ros::Publisher cmd_vel_pub;
@@ -51,9 +51,9 @@ bool has_dock = false;
 double dockX = 0, dockY = 0;
 
 
-bool setGpsState(xbot_positioning::GPSControlSrvRequest &req, xbot_positioning::GPSControlSrvResponse &res) {
-    return true;
-}
+// bool setGpsState(xbot_positioning::GPSControlSrvRequest &req, xbot_positioning::GPSControlSrvResponse &res) {
+//     return true;
+// }
 
 bool setMowEnabled(mower_msgs::MowerControlSrvRequest &req, mower_msgs::MowerControlSrvResponse &res) {
     config.mower_running = req.mow_enabled;
@@ -159,35 +159,35 @@ void odomReceived(const nav_msgs::Odometry::ConstPtr &msg) {
 
 }
 
-bool setPose(xbot_positioning::SetPoseSrvRequest &req, xbot_positioning::SetPoseSrvResponse &res) {
-    double yaw;
-    {
-        tf2::Quaternion q;
-        tf2::fromMsg(req.robot_pose.orientation, q);
+// bool setPose(xbot_positioning::SetPoseSrvRequest &req, xbot_positioning::SetPoseSrvResponse &res) {
+//     double yaw;
+//     {
+//         tf2::Quaternion q;
+//         tf2::fromMsg(req.robot_pose.orientation, q);
 
 
-        tf2::Matrix3x3 m(q);
-        double unused1, unused2;
+//         tf2::Matrix3x3 m(q);
+//         double unused1, unused2;
 
-        m.getRPY(unused1, unused2, yaw);
-    }
+//         m.getRPY(unused1, unused2, yaw);
+//     }
 
-    tf2::Quaternion q(0.0, 0.0, yaw);
-
-
-    poseMsg.header.stamp = ros::Time::now();
-    poseMsg.header.frame_id = "base_link";
-    poseMsg.header.seq++;
-    poseMsg.pose.pose.position.x = req.robot_pose.position.x;
-    poseMsg.pose.pose.position.y = req.robot_pose.position.y;
-    poseMsg.pose.pose.position.z = 0;
-    poseMsg.pose.pose.orientation = tf2::toMsg(q);
-
-    initial_pose_publisher.publish(poseMsg);
+//     tf2::Quaternion q(0.0, 0.0, yaw);
 
 
-    return true;
-}
+//     poseMsg.header.stamp = ros::Time::now();
+//     poseMsg.header.frame_id = "base_link";
+//     poseMsg.header.seq++;
+//     poseMsg.pose.pose.position.x = req.robot_pose.position.x;
+//     poseMsg.pose.pose.position.y = req.robot_pose.position.y;
+//     poseMsg.pose.pose.position.z = 0;
+//     poseMsg.pose.pose.orientation = tf2::toMsg(q);
+
+//     initial_pose_publisher.publish(poseMsg);
+
+
+//     return true;
+// }
 
 
 int main(int argc, char **argv) {
@@ -242,9 +242,9 @@ int main(int argc, char **argv) {
     ros::Subscriber cmd_vel_sub = n.subscribe("/cmd_vel", 0, velReceived, ros::TransportHints().tcpNoDelay(true));
     ros::Subscriber odom_sub = n.subscribe("/mower/odom", 0, odomReceived, ros::TransportHints().tcpNoDelay(true));
     ros::ServiceServer mow_service = n.advertiseService("mower_service/mow_enabled", setMowEnabled);
-    ros::ServiceServer gps_service = n.advertiseService("xbot_positioning/set_gps_state", setGpsState);
+    // ros::ServiceServer gps_service = n.advertiseService("xbot_positioning/set_gps_state", setGpsState);
     ros::ServiceServer emergency_service = n.advertiseService("mower_service/emergency", setEmergencyStop);
-    ros::ServiceServer pose_service = n.advertiseService("xbot_positioning/set_robot_pose", setPose);
+    // ros::ServiceServer pose_service = n.advertiseService("xbot_positioning/set_robot_pose", setPose);
 
     ros::Timer publish_timer = n.createTimer(ros::Duration(0.02), publishStatus);
     ros::Timer update_dock_timer = n.createTimer(ros::Duration(1.0), fetchDock);

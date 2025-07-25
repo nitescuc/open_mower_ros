@@ -41,6 +41,8 @@
 #include "xbot_msgs/ActionInfo.h"
 
 #include "geometry_msgs/Twist.h"
+#include "geometry_msgs/Polygon.h"
+#include "geometry_msgs/PoseWithCovarianceStamped.h"
 
 #include "std_msgs/Bool.h"
 #include "xbot_msgs/MapOverlay.h"
@@ -58,7 +60,7 @@ private:
     std::vector<xbot_msgs::ActionInfo> actions;
 
     sensor_msgs::Joy last_joy;
-    xbot_msgs::AbsolutePose last_pose;
+    geometry_msgs::PoseWithCovarianceStamped last_pose;
 
     ros::Publisher map_overlay_pub;
     ros::Publisher marker_pub;
@@ -89,7 +91,7 @@ private:
 private:
     bool recordNewPolygon(geometry_msgs::Polygon &polygon, xbot_msgs::MapOverlay &resultOverlay);
     bool getDockingPosition(geometry_msgs::Pose &pos);
-    void pose_received(const xbot_msgs::AbsolutePose::ConstPtr &msg);
+    void pose_received(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr &msg);
     void joy_received(const sensor_msgs::Joy &joy_msg);
     void record_dock_received(std_msgs::Bool state_msg);
     void record_polygon_received(std_msgs::Bool state_msg);

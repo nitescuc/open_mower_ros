@@ -250,7 +250,7 @@ int main(int argc, char **argv) {
 
     registerSensors();
 
-    ros::Subscriber pose_sub = n->subscribe("xbot_positioning/xb_pose", 10, pose_received);
+    ros::Subscriber pose_sub = n->subscribe("xbot_driver_gps/xb_pose", 10, pose_received);
     ros::Subscriber map_filtered_sub = n->subscribe("/odometry_map/filtered", 10, odom_received);
     ros::Subscriber state_sub = n->subscribe("mower_logic/current_state", 10, high_level_status);
     ros::Subscriber status_sub = n->subscribe("mower/status", 10, status);

@@ -193,7 +193,7 @@ void AreaRecordingBehavior::enter() {
     mow_area_sub = n->subscribe("/record_mowing", 100, &AreaRecordingBehavior::record_mowing_received, this);
     nav_area_sub = n->subscribe("/record_navigation", 100, &AreaRecordingBehavior::record_navigation_received, this);
 
-    pose_sub = n->subscribe("/xbot_positioning/xb_pose", 100,
+    pose_sub = n->subscribe("/odometry_map/filtered", 100,
                                            &AreaRecordingBehavior::pose_received, this);
 
 }
@@ -229,7 +229,7 @@ bool AreaRecordingBehavior::mower_enabled() {
     return false;
 }
 
-void AreaRecordingBehavior::pose_received(const xbot_msgs::AbsolutePose::ConstPtr &msg) {
+void AreaRecordingBehavior::pose_received(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr &msg) {
     last_pose = *msg;
     has_odom = true;
 }
@@ -457,7 +457,7 @@ bool AreaRecordingBehavior::getDockingPosition(geometry_msgs::Pose &pos) {
     if(!has_first_docking_pos) {
         ROS_INFO_STREAM("Recording first docking position");
 
-        auto odom_ptr = ros::topic::waitForMessage<xbot_msgs::AbsolutePose>("/xbot_positioning/xb_pose", ros::Duration(1, 0));
+        auto odom_ptr = ros::topic::waitForMessage<geometry_msgs::PoseWithCovarianceStamped>("/odometry_map/filtered", ros::Duration(1, 0));
 
         first_docking_pos = odom_ptr->pose.pose;
         has_first_docking_pos = true;
@@ -467,7 +467,7 @@ bool AreaRecordingBehavior::getDockingPosition(geometry_msgs::Pose &pos) {
         ROS_INFO_STREAM("Recording second docking position");
 
 
-        auto odom_ptr = ros::topic::waitForMessage<xbot_msgs::AbsolutePose>("/xbot_positioning/xb_pose", ros::Duration(1, 0));
+        auto odom_ptr = ros::topic::waitForMessage<geometry_msgs::PoseWithCovarianceStamped>("/odometry_map/filtered", ros::Duration(1, 0));
 
         pos.position = odom_ptr->pose.pose.position;
 
