@@ -1,0 +1,90 @@
+# Path Optimizer Area Configuration
+# This file defines area-specific optimization parameters
+
+# Default path ordering parameters (used when area not specified)
+default:
+  inner_first: false      # Reorder paths: inner before outline
+  reverse: false          # Reverse waypoints within each path  
+  start_point:            # Starting point for distance optimization
+    type: "bottom_left"   # Options: top_left, top_right, bottom_left, bottom_right, coordinates
+    # x: 0.0              # Only used when type: "coordinates"
+    # y: 0.0              # Only used when type: "coordinates"
+
+# Area-specific configurations
+areas:
+  # High precision areas (gardens, flower beds, obstacles nearby)
+  1:
+    name: "High Precision"
+    description: "Areas requiring careful path ordering with inner-first approach"
+    inner_first: true          # Mow inner areas before outline boundaries
+    reverse: false
+    start_point:
+      type: "bottom_left"      # Start from bottom-left corner
+    
+  # Standard mowing areas (regular lawn)
+  2:
+    name: "Standard Mowing"
+    description: "Regular lawn areas with original path order"
+    inner_first: false
+    reverse: false
+    start_point:
+      type: "coordinates"     # Custom coordinates
+      x: 5.0
+      y: 5.0
+      
+  # Large open areas (fields, parks)
+  3:
+    name: "Large Open Areas"
+    description: "Large open spaces with reversed path direction for efficiency"
+    inner_first: false
+    reverse: true          # Reverse waypoint sequence for efficiency
+    start_point:
+      type: "top_right"      # Start from top-right corner
+      
+  # Smooth path areas (slopes, delicate areas)
+  4:
+    name: "Smooth Path Required"
+    description: "Areas requiring inner-first with reversed paths for smooth movement"
+    inner_first: true      # Inner areas before boundaries
+    reverse: true          # Reverse paths for smooth movement
+    start_point:
+      type: "coordinates"   # Custom start position
+      x: 2.0
+      y: 8.0
+      
+  # Narrow passages (between buildings, tight spaces)
+  5:
+    name: "Narrow Passages"
+    description: "Tight spaces requiring inner-first path ordering"
+    inner_first: true          # Clear inner areas before boundaries
+    reverse: false
+    start_point:
+      type: "bottom_left"     # Start from bottom-left
+      
+  # Rough terrain (uneven ground, rocks)
+  6:
+    name: "Rough Terrain"
+    description: "Uneven terrain with reversed path direction"
+    inner_first: false
+    reverse: true
+    start_point:
+      type: "top_left"        # Start from top-left corner
+      
+  # Speed priority areas (large flat areas where speed matters)
+  7:
+    name: "Speed Priority"
+    description: "Areas where original path order and direction are maintained"
+    inner_first: false
+    reverse: false
+    start_point:
+      type: "bottom_right"    # Start from bottom-right corner
+      y: 20.0
+
+# Global path ordering settings
+global_settings:
+  # Logging
+  log_optimization_statistics: true
+  log_area_selections: true
+  
+  # Path ordering settings
+  enable_distance_optimization: true   # Enable distance-based inner path ordering

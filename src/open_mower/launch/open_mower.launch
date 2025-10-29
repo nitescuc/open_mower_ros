@@ -47,6 +47,10 @@
         <param name="add_fake_obstacle" value="$(env OM_ADD_FAKE_OBSTACLE)"/>
     </node>
     <node pkg="slic3r_coverage_planner" type="slic3r_coverage_planner" name="slic3r_coverage_planner" output="screen"/>
+    <node name="path_optimizer" pkg="path_optimizer" type="path_optimizer_node.py" output="screen">
+        <param name="areas_config_file" value="$(find open_mower)/params/areas_config.yaml" />
+    </node>
+    
 
     <node pkg="twist_mux" type="twist_mux" name="twist_mux" output="screen">
         <remap from="cmd_vel_out" to="/cmd_vel"/>

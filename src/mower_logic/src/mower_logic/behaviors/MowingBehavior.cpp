@@ -28,12 +28,16 @@
 #include "mower_map/GetMowingAreaSrv.h"
 #include "mower_map/SetNavPointSrv.h"
 #include "mower_map/ClearNavPointSrv.h"
+#include "path_optimizer/OptimizePaths.h"
+#include "path_optimizer/GetAreaConfig.h"
 
 extern ros::ServiceClient mapClient;
 extern ros::ServiceClient pathClient;
 extern ros::ServiceClient pathProgressClient;
 extern ros::ServiceClient setNavPointClient;
 extern ros::ServiceClient clearNavPointClient;
+extern ros::ServiceClient pathOptimizerClient;
+extern ros::ServiceClient areaConfigClient;
 
 extern actionlib::SimpleActionClient<mbf_msgs::MoveBaseAction> *mbfClient;
 extern actionlib::SimpleActionClient<mbf_msgs::ExePathAction> *mbfClientExePath;
@@ -65,27 +69,55 @@ bool is_area_in_param_list(int area, std::string param) {
     return false;
 }
 
+void MowingBehavior::set_start_area(int area) {
+    currentMowingArea = area;
+    currentMowingPath = 0;
+    currentMowingPathIndex = 0;
+    currentMowingPaths.clear();
+}
+
 void MowingBehavior::checkLidarEnabled() {
-    int area = getConfig().current_area;
+    // int area = getConfig().current_area;
+    int area = currentMowingArea;
     bool lidar_enabled = is_area_in_param_list(area, config.lidar_enabled_areas);
     ROS_INFO_STREAM("MowingBehavior: Setting lidar to " << lidar_enabled << " for area " << area);
     setLidarEnabled(lidar_enabled);
 }
 
 Behavior *MowingBehavior::execute() {
-    auto config = getConfig();
-    if (config.clear_path_on_start) {
-        currentMowingPaths.clear();
-        config.clear_path_on_start = false;
-        setConfig(config);
-    }
+    // auto config = getConfig();
+    // clear path on start means we start in a given area from scratch
+    // if (config.clear_path_on_start) {
+    //     currentMowingArea = config.current_area; // start with configured area
+    //     currentMowingPath = 0;
+    //     currentMowingPathIndex = 0;
+    //     currentMowingPaths.clear();
+    //     config.clear_path_on_start = false;
+    //     setConfig(config);
+    // }
 
     shared_state->active_semiautomatic_task = true;
 
     while (ros::ok() && !aborted) {
+        // get area config
+        path_optimizer::GetAreaConfig areaConfigSrv;
+        areaConfigSrv.request.area = currentMowingArea;
+        if (!areaConfigClient.call(areaConfigSrv)) {
+            ROS_ERROR_STREAM("MowingBehavior: Error loading area config");
+            return nullptr;
+        }
+        // apply area config
+        auto areaConfig = areaConfigSrv.response;
+        
         checkLidarEnabled();
 
-        if (currentMowingPaths.empty() && !create_mowing_plan(getConfig().current_area)) {
+        // goto fix point in area if available
+        if (areaConfig.has_fix_point) {
+            ROS_INFO_STREAM("MowingBehavior: Going to fix point in area: " << currentMowingArea);
+            //goto_fix_point_and_wait(areaConfig.fix_point);
+        }
+
+        if (currentMowingPaths.empty() && !create_mowing_plan(currentMowingArea)) {
             ROS_INFO_STREAM("MowingBehavior: Could not create mowing plan, docking");
             // Start again from first area next time.
             reset();
@@ -99,9 +131,11 @@ Behavior *MowingBehavior::execute() {
         if (finished) {
             // skip to next area if current
             ROS_INFO_STREAM("MowingBehavior: Executing mowing plan - finished");
-            auto config = getConfig();
-            config.current_area++;
-            setConfig(config);
+            currentMowingArea++;
+            // auto config = getConfig();
+            // config.current_area++;
+            // currentMowingArea = config.current_area;
+            // setConfig(config);
         }
     }
 
@@ -141,7 +175,7 @@ void MowingBehavior::exit() {
 void MowingBehavior::reset() {
     currentMowingPaths.clear();
     auto config = getConfig();
-    config.current_area = 0;
+    // config.current_area = 0;
 
     currentMowingArea = 0;
     currentMowingPath = 0;
@@ -223,10 +257,19 @@ bool MowingBehavior::create_mowing_plan(int area_index) {
         ROS_INFO_STREAM("MowingBehavior: Auto-detected mowing angle + mowing angle offset: " << angle);
     }
 
+    // get area config
+    path_optimizer::GetAreaConfig areaConfigSrv;
+    areaConfigSrv.request.area = area_index;
+    if (!areaConfigClient.call(areaConfigSrv)) {
+        ROS_ERROR_STREAM("MowingBehavior: Error loading area config");
+        return false;
+    }
+    // apply area config
+    auto areaConfig = areaConfigSrv.response;
     // calculate coverage
     slic3r_coverage_planner::PlanPath pathSrv;
     pathSrv.request.angle = angle;
-    pathSrv.request.outline_count = config.outline_count;
+    pathSrv.request.outline_count = areaConfig.outlines_count;
     pathSrv.request.outline = mapSrv.response.area.area;
     pathSrv.request.holes = mapSrv.response.area.obstacles;
     pathSrv.request.fill_type = slic3r_coverage_planner::PlanPathRequest::FILL_LINEAR;
@@ -237,11 +280,35 @@ bool MowingBehavior::create_mowing_plan(int area_index) {
         return false;
     }
 
+    if (false) {
+
+    // Call path optimizer service to handle path processing and optimization
+    path_optimizer::OptimizePaths optimizeSrv;
+    optimizeSrv.request.paths = pathSrv.response.paths;
+    optimizeSrv.request.area = area_index;
+
+    ROS_INFO_STREAM("MowingBehavior: Optimizing paths for area " << area_index << " with " << pathSrv.response.paths.size() << " paths");
+    
+    if (!pathOptimizerClient.call(optimizeSrv)) {
+        ROS_ERROR_STREAM("MowingBehavior: Error during path optimization");
+        return false;
+    }
+
+    ROS_INFO_STREAM("MowingBehavior: Path optimization completed. Received " << optimizeSrv.response.paths.size() << " optimized paths");
+    currentMowingPaths = optimizeSrv.response.paths;
+
+    } else {
+
     // reverse areas ?
-    if (is_area_in_param_list(area_index, config.mow_direction_reverse_areas)) {
+    // if (is_area_in_param_list(area_index, config.mow_direction_reverse_areas)) {
+    if (areaConfig.reverse) {
         ROS_INFO_STREAM("MowingBehavior: Reversing path for area number: " << area_index);
         for (int i = 0; i < pathSrv.response.paths.size(); i++) {
             auto &path = pathSrv.response.paths[i];
+            if (path.is_outline) {
+                // do not reverse outline paths
+                continue;
+            }
             auto &poses = path.path.poses;
             int n = poses.size();
 
@@ -269,14 +336,37 @@ bool MowingBehavior::create_mowing_plan(int area_index) {
         }
     }
 
+    // separate outline paths and fill paths
+    std::vector<slic3r_coverage_planner::Path> outline_paths;
+    std::vector<slic3r_coverage_planner::Path> fill_paths;
+    for (const auto &path : pathSrv.response.paths) {
+        if (path.is_outline) {
+            outline_paths.push_back(path);
+        } else {
+            fill_paths.push_back(path);
+        }
+    }
+
     // inner first ?
-    if (is_area_in_param_list(area_index, config.mow_direction_inner_first_areas)) {
+    // if (is_area_in_param_list(area_index, config.mow_direction_inner_first_areas)) {
+    //     ROS_INFO_STREAM("MowingBehavior: Inner first for area: " << area_index);
+    //     std::sort(pathSrv.response.paths.begin(), pathSrv.response.paths.end(), [](slic3r_coverage_planner::Path a, slic3r_coverage_planner::Path b) {
+    //         return !a.is_outline && b.is_outline;
+    //     });
+    // }
+    // merge back together
+    // if (is_area_in_param_list(area_index, config.mow_direction_inner_first_areas)) {
+    if (areaConfig.inner_first) {
         ROS_INFO_STREAM("MowingBehavior: Inner first for area: " << area_index);
-        std::sort(pathSrv.response.paths.begin(), pathSrv.response.paths.end(), [](slic3r_coverage_planner::Path a, slic3r_coverage_planner::Path b) {
-            return !a.is_outline && b.is_outline;
-        });
+        fill_paths.insert(fill_paths.end(), outline_paths.begin(), outline_paths.end());
+        pathSrv.response.paths = fill_paths;
+    } else {
+        outline_paths.insert(outline_paths.end(), fill_paths.begin(), fill_paths.end());
+        pathSrv.response.paths = outline_paths;
     }
     currentMowingPaths = pathSrv.response.paths;
+    
+    }
 
     // Calculate mowing plan digest from the poses
     // TODO: move to slic3r_coverage_planner
@@ -321,12 +411,12 @@ bool MowingBehavior::create_mowing_plan(int area_index) {
         // if we are in the same area, we continue with the last path index (clear paths and points to the checkpoint)
         if (currentMowingPath > 0 && currentMowingPath < currentMowingPaths.size()) {
             ROS_INFO_STREAM("MowingBehavior: Continuing with path: " << currentMowingPathIndex);
-            //currentMowingPaths.erase(currentMowingPaths.begin(), currentMowingPaths.begin() + currentMowingPathIndex);
+            currentMowingPaths.erase(currentMowingPaths.begin(), currentMowingPaths.begin() + currentMowingPathIndex);
         }
         auto &path = currentMowingPaths.front();
         if (currentMowingPathIndex > 0 && currentMowingPathIndex < path.path.poses.size()) {
             ROS_INFO_STREAM("MowingBehavior: Continuing with path index: " << currentMowingPathIndex);
-            //path.path.poses.erase(path.path.poses.begin(), path.path.poses.begin() + currentMowingPathIndex);
+            path.path.poses.erase(path.path.poses.begin(), path.path.poses.begin() + currentMowingPathIndex);
         }
     }
 

@@ -1,0 +1,7 @@
+# Service definition for path optimization
+# Request: Array of paths to optimize and area identifier
+slic3r_coverage_planner/Path[] paths
+int32 area
+---
+# Response: Array of optimized paths (reordered based on area settings)
+slic3r_coverage_planner/Path[] paths

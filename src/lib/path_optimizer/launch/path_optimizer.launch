@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- Path Optimizer Node Launch File -->
+    
+    <!-- Arguments -->
+    <arg name="node_name" default="path_optimizer" />
+    <arg name="input_topic" default="/mower_logic/mowing_path" />
+    <arg name="output_topic" default="/path_optimizer/optimized_path" />
+    <arg name="areas_config_file" default="$(find path_optimizer)/config/areas_config.yaml" />
+    
+    <!-- Path Optimizer Node -->
+    <node name="$(arg node_name)" pkg="path_optimizer" type="path_optimizer_node.py" output="screen">
+        <!-- Parameters -->
+        <param name="areas_config_file" value="$(arg areas_config_file)" />
+        
+        <!-- Topic remapping -->
+        <remap from="~/input_path" to="$(arg input_topic)" />
+        <remap from="~/optimized_path" to="$(arg output_topic)" />
+        
+        <!-- Service ~/optimize is automatically available -->
+    </node>
+    
+    <!-- 
+    Available Services:
+    - $(arg node_name)/optimize: OptimizePaths service for batch path optimization with reordering
+    
+    Service Usage Examples:
+    rosservice call /path_optimizer/optimize "paths: [path1, path2] is_outline: [false, true] area: 1"
+    
+    Path Reordering:
+    - If area has inner_first=true: inner paths (is_outline=false) will be placed before outline paths
+    - If area has inner_first=false: original path order is maintained
+    -->
+    
+</launch>

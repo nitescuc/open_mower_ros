@@ -16,6 +16,7 @@ find_package(catkin REQUIRED COMPONENTS
   nav_msgs
   roscpp
   slic3r_coverage_planner
+  path_optimizer
   tf2
   tf2_geometry_msgs
   tf2_ros

@@ -1,0 +1,16 @@
+# Service definition for fetching area configuration
+# Request: Area identifier
+int32 area
+---
+# Response: Area configuration as structured fields
+bool success
+string message
+string name
+bool inner_first
+bool reverse
+int32 outlines_count
+float64 start_point_x
+float64 start_point_y
+bool has_fix_point
+float64 fix_point_x
+float64 fix_point_y

@@ -87,6 +87,8 @@ public:
     void checkpoint();
 
     bool restore_checkpoint();
+
+    void set_start_area(int area);
 };
 
 

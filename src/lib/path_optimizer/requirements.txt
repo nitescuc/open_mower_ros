@@ -1,0 +1,5 @@
+# Python dependencies for path_optimizer package
+numpy>=1.16.0
+scipy>=1.3.0
+PyYAML>=5.1.0
+rospkg

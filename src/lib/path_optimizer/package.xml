@@ -1,0 +1,43 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>path_optimizer</name>
+  <version>0.0.0</version>
+  <description>The path_optimizer package - Advanced path optimization algorithms for autonomous mowing</description>
+
+  <maintainer email="clemens.elflein@googlemail.com">Clemens Elflein</maintainer>
+
+  <license>MIT</license>
+
+  <url type="website">https://github.com/ClemensElflein/OpenMower</url>
+
+  <author email="clemens.elflein@googlemail.com">Clemens Elflein</author>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <build_depend>rospy</build_depend>
+  <build_depend>geometry_msgs</build_depend>
+  <build_depend>nav_msgs</build_depend>
+  <build_depend>std_msgs</build_depend>
+  <build_depend>mower_msgs</build_depend>
+  <build_depend>slic3r_coverage_planner</build_depend>
+  <build_depend>message_generation</build_depend>
+  
+  <build_export_depend>rospy</build_export_depend>
+  <build_export_depend>geometry_msgs</build_export_depend>
+  <build_export_depend>nav_msgs</build_export_depend>
+  <build_export_depend>std_msgs</build_export_depend>
+  <build_export_depend>mower_msgs</build_export_depend>
+  <build_export_depend>slic3r_coverage_planner</build_export_depend>
+  
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>mower_msgs</exec_depend>
+  <exec_depend>slic3r_coverage_planner</exec_depend>
+  <exec_depend>message_runtime</exec_depend>
+
+  <!-- The export tag contains other, unspecified, tags -->
+  <export>
+    <!-- Other tools can request additional information be placed here -->
+  </export>
+</package>
