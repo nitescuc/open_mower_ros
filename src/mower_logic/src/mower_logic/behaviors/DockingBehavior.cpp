@@ -21,27 +21,15 @@ extern ros::ServiceClient dockingPointClient;
 extern actionlib::SimpleActionClient<mbf_msgs::MoveBaseAction> *mbfClient;
 extern actionlib::SimpleActionClient<mbf_msgs::ExePathAction> *mbfClientExePath;
 extern mower_msgs::Status getStatus();
-extern ros::ServiceClient pathProgressClient;
 
 extern void stopMoving();
 extern bool setGPS(bool enabled);
 extern bool setGPSRtkFloat(bool enabled);
 extern bool isEmergencyMode();
 extern void setLidarEnabled(bool enabled);
+extern int getCurrentPathProgress();
 
 DockingBehavior DockingBehavior::INSTANCE;
-
-int getDockingMowPathIndex()
-{
-    ftc_local_planner::PlannerGetProgress progressSrv;
-    int currentIndex = -1;
-    if(pathProgressClient.call(progressSrv)) {
-        currentIndex = progressSrv.response.index;
-    } else {
-        ROS_ERROR("MowingBehavior: getMowIndex() - Error getting progress from FTC planner");
-    }
-    return(currentIndex);
-}
 
 bool DockingBehavior::execute_goal(actionlib::SimpleActionClient<mbf_msgs::MoveBaseAction> *client, mbf_msgs::MoveBaseGoal goal) {
     client->sendGoal(goal);
@@ -80,7 +68,7 @@ bool DockingBehavior::execute_goal(actionlib::SimpleActionClient<mbf_msgs::MoveB
                     goalSuccess = true;
                     waitingForResult = false;
                 } else {
-                    int index = getDockingMowPathIndex();
+                    int index = getCurrentPathProgress();
                     if ((index != old_index) || !this->hasGoodGPS() || isEmergencyMode()) {
                         if (!this->hasGoodGPS())
                             ROS_WARN_STREAM_THROTTLE(10, "DockingBehavior: (FIRST POINT) - No GPS signal, waiting.");

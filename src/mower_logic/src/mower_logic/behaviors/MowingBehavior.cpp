@@ -49,6 +49,7 @@ extern void registerActions(std::string prefix, const std::vector<xbot_msgs::Act
 extern bool calibrateGyro();
 extern bool setGPSRtkFloat(bool enabled);
 extern void setLidarEnabled(bool enabled);
+extern int getCurrentPathProgress();
 
 extern bool isEmergencyMode();
 
@@ -423,18 +424,6 @@ bool MowingBehavior::create_mowing_plan(int area_index) {
     return true;
 }
 
-int getCurrentMowPathIndex()
-{
-    ftc_local_planner::PlannerGetProgress progressSrv;
-    int currentIndex = -1;
-    if(pathProgressClient.call(progressSrv)) {
-        currentIndex = progressSrv.response.index;
-    } else {
-        ROS_ERROR("MowingBehavior: getMowIndex() - Error getting progress from FTC planner");
-    }
-    return(currentIndex);
-}
-
 void printNavState(int state)
 {
     switch (state)
@@ -570,7 +559,7 @@ bool MowingBehavior::execute_mowing_plan() {
                         requested_crash_recovery_flag = false;
                         break;
                     }
-                    int index = getCurrentMowPathIndex();
+                    int index = getCurrentPathProgress();
                     if (index != old_index) {
                         last_index_time = ros::Time::now();
                         old_index = index;
@@ -716,7 +705,7 @@ bool MowingBehavior::execute_mowing_plan() {
                         break; // Trim path
                     }
                     // show progress
-                    currentMowingPathIndex = getCurrentMowPathIndex();
+                    currentMowingPathIndex = getCurrentPathProgress();
                     ROS_INFO_STREAM_THROTTLE(5, "MowingBehavior: (MOW) Progress: " << currentMowingPathIndex << "/" << path.path.poses.size());                    
                     if (ros::Time::now() - last_checkpoint > ros::Duration(30.0)) checkpoint();
                 } else {
@@ -731,7 +720,7 @@ bool MowingBehavior::execute_mowing_plan() {
             if (current_status.state_ != actionlib::SimpleClientGoalState::PENDING &&
                 current_status.state_ != actionlib::SimpleClientGoalState::RECALLED)
             {
-                int currentIndex = getCurrentMowPathIndex();
+                int currentIndex = getCurrentPathProgress();
                 ROS_INFO_STREAM(">> MowingBehavior: (MOW) PlannerGetProgress currentIndex = " << currentIndex << " of " << path.path.poses.size());
                 printNavState(current_status.state_);
                 // if we have fully processed the segment or we have encountered an error, drop the path segment

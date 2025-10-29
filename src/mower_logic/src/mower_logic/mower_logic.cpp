@@ -152,6 +152,18 @@ nav_msgs::Odometry getOdometry() {
 
 void setEmergencyMode(bool emergency);
 
+int getCurrentPathProgress()
+{
+    ftc_local_planner::PlannerGetProgress progressSrv;
+    int currentIndex = -1;
+    if(pathProgressClient.call(progressSrv)) {
+        currentIndex = progressSrv.response.index;
+    } else {
+        ROS_ERROR("getCurrentPathProgress() - Error getting progress from FTC planner");
+    }
+    return(currentIndex);
+}
+
 void registerActions(std::string prefix, const std::vector<xbot_msgs::ActionInfo> &actions) {
     xbot_msgs::RegisterActionsSrv srv;
     srv.request.node_prefix = prefix;
