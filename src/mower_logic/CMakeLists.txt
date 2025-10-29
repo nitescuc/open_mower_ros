@@ -170,6 +170,7 @@ include_directories(
 add_executable(mower_logic
         src/mower_logic/mower_logic.cpp
         src/mower_logic/behaviors/Behavior.h
+        src/mower_logic/behaviors/Behavior.cpp
         src/mower_logic/behaviors/DockingBehavior.h
         src/mower_logic/behaviors/DockingBehavior.cpp
         src/mower_logic/behaviors/UndockingBehavior.h

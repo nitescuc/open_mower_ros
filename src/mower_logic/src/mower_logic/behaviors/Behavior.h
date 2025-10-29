@@ -20,8 +20,12 @@
 #include "ros/ros.h"
 #include "mower_logic/MowerLogicConfig.h"
 #include "mower_msgs/HighLevelStatus.h"
+#include <actionlib/client/simple_action_client.h>
+#include <mbf_msgs/MoveBaseAction.h>
+#include <geometry_msgs/PoseStamped.h>
 #include <atomic>
 #include <memory>
+#include <functional>
 
 enum eAutoMode {
     MANUAL = 0,
@@ -59,6 +63,37 @@ protected:
 
     mower_logic::MowerLogicConfig config;
     std::shared_ptr<sSharedState> shared_state;
+
+    /**
+     * Execute a goal using MBF (Move Base Flex) with progress monitoring and error handling.
+     * This method sends a goal to the MoveBase action client and monitors its execution,
+     * handling GPS loss, emergency mode, and charging detection.
+     * 
+     * @param client The MoveBase action client to use
+     * @param goal The goal to execute
+     * @return true if the goal was successfully reached or charging detected, false otherwise
+     */
+    // Optional callback gets the current action state (SimpleClientGoalState::state_) as int and returns:
+    // < 0 => treat as error (cancel + fail), > 0 => treat as success (cancel + succeed), 0 => ignore and continue
+    bool execute_goal(
+        actionlib::SimpleActionClient<mbf_msgs::MoveBaseAction> *client,
+        mbf_msgs::MoveBaseGoal goal,
+        const std::function<int(int)> &state_cb = nullptr
+    );
+
+    /**
+     * Drive to a specific position using the default controller.
+     * This is a convenience method that creates a MoveBaseGoal from a PoseStamped and executes it.
+     * 
+     * @param target_pose The target pose to drive to
+     * @param controller The controller to use (default: "FTCPlanner")
+     * @return true if the position was successfully reached, false otherwise
+     */
+    bool drive_to_position(
+        const geometry_msgs::PoseStamped& target_pose,
+        const std::string& controller = "FTCPlanner",
+        const std::function<int(int)> &state_cb = nullptr
+    );
 
     /**
      * Called ONCE on state enter.
