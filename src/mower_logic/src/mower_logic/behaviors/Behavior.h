@@ -33,6 +33,13 @@ enum eAutoMode {
     AUTO = 2
 };
 
+// Progress error codes returned by on_progress()
+// Keep values negative to fit existing contract: <0 error, >0 success, 0 continue
+enum ProgressError {
+    PROGRESS_ERROR_UNRECOVERABLE = -1, // e.g., explicit abort; do not retry
+    PROGRESS_ERROR_RECOVERABLE   = -2  // e.g., transient failure; retry allowed
+};
+
 struct sSharedState {
     bool active_semiautomatic_task;
 };
@@ -68,8 +75,13 @@ protected:
      * Called during goal execution to allow derived classes to influence the execution based on state.
      * Base implementation handles abort flag, charging detection, GPS/emergency timeout, and progress monitoring.
      * 
+     * Return codes contract:
+     *  - Behavior::PROGRESS_ERROR_UNRECOVERABLE (-1): unrecoverable error (e.g., abort) -> cancel and do NOT retry
+     *  - Behavior::PROGRESS_ERROR_RECOVERABLE   (-2): recoverable error (e.g., transient timeout) -> cancel and MAY retry
+     *  - 0: continue monitoring
+     *  - >0: success -> cancel and succeed
+     *
      * @param state The current action state (SimpleClientGoalState::state_)
-     * @return < 0 to treat as error (cancel + fail), > 0 to treat as success (cancel + succeed), 0 to continue normally
      */
     virtual int on_progress(int state);
 
@@ -78,14 +90,17 @@ protected:
      * This method sends a goal to the MoveBase action client and monitors its execution,
      * handling GPS loss, emergency mode, and charging detection.
      * Calls on_progress() to allow derived classes to influence execution.
+     * Retries the goal up to retry_count times unless succeeded or aborted.
      * 
      * @param client The MoveBase action client to use
      * @param goal The goal to execute
+     * @param retry_count Number of times to retry the goal on failure (default: 5)
      * @return true if the goal was successfully reached or charging detected, false otherwise
      */
     bool execute_goal(
         actionlib::SimpleActionClient<mbf_msgs::MoveBaseAction> *client,
-        mbf_msgs::MoveBaseGoal goal
+        mbf_msgs::MoveBaseGoal goal,
+        int retry_count = 5
     );
 
     /**

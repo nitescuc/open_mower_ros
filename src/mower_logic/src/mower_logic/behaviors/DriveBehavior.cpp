@@ -71,7 +71,6 @@ Behavior *DriveBehavior::execute() {
 
 void DriveBehavior::enter() {
     paused = aborted = false;
-    has_target = false;
     should_dock = false;
 }
 
