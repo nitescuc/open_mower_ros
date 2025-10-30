@@ -32,6 +32,7 @@ extern bool setGPSRtkFloat(bool enabled);
 
 UndockingBehavior UndockingBehavior::INSTANCE(&MowingBehavior::INSTANCE);
 UndockingBehavior UndockingBehavior::RETRY_INSTANCE(&DockingBehavior::INSTANCE);
+UndockingBehavior UndockingBehavior::DRIVE_INSTANCE(&DriveBehavior::INSTANCE);
 
 std::string UndockingBehavior::state_name() {
     return "UNDOCKING";
@@ -216,6 +217,10 @@ void UndockingBehavior::command_s1() {
 }
 
 void UndockingBehavior::command_s2() {
+
+}
+
+void UndockingBehavior::command_drive() {
 
 }
 

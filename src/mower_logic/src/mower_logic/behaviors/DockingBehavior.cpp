@@ -315,6 +315,10 @@ void DockingBehavior::command_s2() {
 
 }
 
+void DockingBehavior::command_drive() {
+
+}
+
 bool DockingBehavior::redirect_joystick() {
     return false;
 }

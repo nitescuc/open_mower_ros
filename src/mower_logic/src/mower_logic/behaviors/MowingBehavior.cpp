@@ -802,6 +802,10 @@ void MowingBehavior::command_s2() {
     skip_area = true;
 }
 
+void MowingBehavior::command_drive() {
+    // Not applicable
+}
+
 bool MowingBehavior::redirect_joystick() {
     return false;
 }

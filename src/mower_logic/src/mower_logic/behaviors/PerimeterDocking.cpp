@@ -347,6 +347,8 @@ void PerimeterBase::command_s1() {}
 
 void PerimeterBase::command_s2() {}
 
+void PerimeterBase::command_drive() {}
+
 bool PerimeterBase::redirect_joystick() {
     return false;
 }

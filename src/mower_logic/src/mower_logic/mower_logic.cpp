@@ -43,12 +43,14 @@
 #include "mower_logic/MowerLogicConfig.h"
 #include "behaviors/Behavior.h"
 #include "behaviors/IdleBehavior.h"
+#include "behaviors/DriveBehavior.h"
 #include "behaviors/AreaRecordingBehavior.h"
 #include "mower_msgs/HighLevelControlSrv.h"
 #include "std_msgs/String.h"
 #include "std_msgs/Bool.h"
 #include "mower_msgs/HighLevelStatus.h"
 #include "mower_msgs/StartInAreaSrv.h"
+#include "mower_msgs/DriveToPositionSrv.h"
 #include "mower_map/ClearMapSrv.h"
 #include "xbot_msgs/AbsolutePose.h"
 #include "robot_localization_om/GPSControlSrv.h"
@@ -729,6 +731,35 @@ bool startInAreaCommand(mower_msgs::StartInAreaSrvRequest &req, mower_msgs::Star
     return true;
 }
 
+bool driveToPositionCommand(mower_msgs::DriveToPositionSrvRequest &req, mower_msgs::DriveToPositionSrvResponse &res) {
+    ROS_INFO_STREAM("Driving to position x=" << req.x << ", y=" << req.y);
+    
+    // Create a PoseStamped with the target position
+    geometry_msgs::PoseStamped target_pose;
+    target_pose.header.frame_id = "map";
+    target_pose.header.stamp = ros::Time::now();
+    target_pose.pose.position.x = req.x;
+    target_pose.pose.position.y = req.y;
+    target_pose.pose.position.z = 0.0;
+    
+    // Set orientation to current orientation (or could calculate based on current position)
+    target_pose.pose.orientation.x = 0.0;
+    target_pose.pose.orientation.y = 0.0;
+    target_pose.pose.orientation.z = 0.0;
+    target_pose.pose.orientation.w = 1.0;
+    
+    // Set the target point in DriveBehavior
+    DriveBehavior::INSTANCE.set_point(target_pose);
+    
+    // Trigger the drive command
+    if (currentBehavior) {
+        ROS_INFO_STREAM("Current behavior: " << currentBehavior->state_name() << ", switching to drive");
+        currentBehavior->command_drive();
+    }
+    
+    return true;
+}
+
 bool highLevelCommand(mower_msgs::HighLevelControlSrvRequest &req, mower_msgs::HighLevelControlSrvResponse &res) {
     switch(req.command) {
         case mower_msgs::HighLevelControlSrvRequest::COMMAND_HOME:
@@ -887,6 +918,7 @@ int main(int argc, char **argv) {
 
     ros::ServiceServer high_level_control_srv = n->advertiseService("mower_service/high_level_control", highLevelCommand);
     ros::ServiceServer start_in_area_srv = n->advertiseService("mower_service/start_in_area", startInAreaCommand);
+    ros::ServiceServer drive_to_position_srv = n->advertiseService("mower_service/drive_to_position", driveToPositionCommand);
 
 
     ros::AsyncSpinner asyncSpinner(1);
