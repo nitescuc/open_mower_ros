@@ -25,14 +25,76 @@ extern bool isEmergencyMode();
 extern int getCurrentPathProgress();
 extern actionlib::SimpleActionClient<mbf_msgs::MoveBaseAction> *mbfClient;
 
-bool Behavior::drive_to_position(const geometry_msgs::PoseStamped& target_pose, const std::string& controller, const std::function<int(int)> &state_cb) {
+int Behavior::on_progress(int state) {
+    // Check abort flag first
+    if(aborted) {
+        ROS_INFO_STREAM("Goal execution aborted.");
+        return -1; // Signal abort
+    }
+
+    const auto last_status = getStatus();
+    
+    switch (state) {
+        case actionlib::SimpleClientGoalState::ACTIVE:
+        case actionlib::SimpleClientGoalState::PENDING:
+            // currently moving. Cancel as soon as we're in the station
+            if (last_status.v_charge > 5.0) {
+                ROS_INFO_STREAM("Got a voltage of " << last_status.v_charge << " V. Cancelling goal.");
+                return 1; // Signal success (charging detected)
+            }
+            
+            // Check for progress timeout
+            {
+                static int old_index = -1;
+                static ros::Time last_index_time = ros::Time::now();
+                
+                int index = getCurrentPathProgress();
+                if (index != old_index) {
+                    last_index_time = ros::Time::now();
+                    old_index = index;
+                } else {
+                    if (!this->hasGoodGPS() || isEmergencyMode()) {
+                        if (!this->hasGoodGPS())
+                            ROS_WARN_STREAM_THROTTLE(10, "Behavior: (on_progress) - No GPS signal, waiting.");
+                        if (isEmergencyMode())
+                            ROS_WARN_STREAM_THROTTLE(10, "Behavior: (on_progress) - Emergency mode, waiting.");
+                        last_index_time = ros::Time::now();
+                    } else {
+                        if ((ros::Time::now() - last_index_time).toSec() > 30.0) {
+                            ROS_ERROR_STREAM("Behavior: (on_progress) - No progress for 30 seconds, stopping path execution. HasGoodGPS=" << this->hasGoodGPS());
+                            return -1; // Signal error (timeout)
+                        }
+                    }
+                }
+                ROS_INFO_STREAM_THROTTLE(5, "Behavior: Goal Progress: " << index);
+            }
+            break;
+            
+        case actionlib::SimpleClientGoalState::SUCCEEDED:
+            // we stopped moving because the path has ended. check, if we have docked successfully
+            if (last_status.v_charge > 5.0) {
+                ROS_INFO_STREAM("Goal stopped, because we reached end pose. Voltage was " << last_status.v_charge << " V.");
+            } else {
+                ROS_INFO_STREAM("Behavior: Goal reached");
+            }
+            return 1; // Signal success
+            
+        default:
+            ROS_WARN_STREAM("Some error during path execution. Goal failed. status value was: " << state);
+            return -1; // Signal error
+    }
+    
+    return 0; // Continue normally
+}
+
+bool Behavior::drive_to_position(const geometry_msgs::PoseStamped& target_pose, const std::string& controller) {
     mbf_msgs::MoveBaseGoal moveBaseGoal;
     moveBaseGoal.target_pose = target_pose;
     moveBaseGoal.controller = controller;
-    return execute_goal(mbfClient, moveBaseGoal, state_cb);
+    return execute_goal(mbfClient, moveBaseGoal);
 }
 
-bool Behavior::execute_goal(actionlib::SimpleActionClient<mbf_msgs::MoveBaseAction> *client, mbf_msgs::MoveBaseGoal goal, const std::function<int(int)> &state_cb) {
+bool Behavior::execute_goal(actionlib::SimpleActionClient<mbf_msgs::MoveBaseAction> *client, mbf_msgs::MoveBaseGoal goal) {
     client->sendGoal(goal);
 
     bool goalSuccess = false;
@@ -40,108 +102,35 @@ bool Behavior::execute_goal(actionlib::SimpleActionClient<mbf_msgs::MoveBaseActi
 
     ros::Rate r(10);
 
-    // we can assume the last_state is current since we have a security timer
-    int old_index = -1;
-    ros::Time last_index_time = ros::Time::now();
     while (waitingForResult) {
 
         r.sleep();
 
-        const auto last_status = getStatus();
         auto mbfState = client->getState();
 
-        // Allow external callback to influence execution based on state
-        if (state_cb) {
-            int cb = 0;
-            try {
-                cb = state_cb(mbfState.state_);
-            } catch (const std::exception &e) {
-                ROS_ERROR_STREAM_THROTTLE(5, "Behavior: state callback threw exception: " << e.what());
-                cb = -1; // treat as error
-            }
-            if (cb < 0) {
-                ROS_WARN_STREAM("Behavior: state callback requested ABORT (cb<0), cancelling goal.");
-                client->cancelAllGoals();
-                stopMoving();
-                goalSuccess = false;
-                waitingForResult = false;
-                continue;
-            } else if (cb > 0) {
-                ROS_INFO_STREAM("Behavior: state callback signaled SUCCESS (cb>0), cancelling goal.");
-                client->cancelAllGoals();
-                stopMoving();
-                goalSuccess = true;
-                waitingForResult = false;
-                continue;
-            }
-            // cb == 0 -> no change, continue with normal logic
+        // Allow derived classes to influence execution based on state
+        int progress_result = 0;
+        try {
+            progress_result = this->on_progress(mbfState.state_);
+        } catch (const std::exception &e) {
+            ROS_ERROR_STREAM_THROTTLE(5, "Behavior: on_progress threw exception: " << e.what());
+            progress_result = -1; // treat as error
         }
-
-        if(aborted) {
-            ROS_INFO_STREAM("Goal execution aborted.");
+        
+        if (progress_result < 0) {
+            ROS_WARN_STREAM("Behavior: on_progress requested ABORT (<0), cancelling goal.");
             client->cancelAllGoals();
             stopMoving();
             goalSuccess = false;
             waitingForResult = false;
-            continue;
+        } else if (progress_result > 0) {
+            ROS_INFO_STREAM("Behavior: on_progress signaled SUCCESS (>0), cancelling goal.");
+            client->cancelAllGoals();
+            stopMoving();
+            goalSuccess = true;
+            waitingForResult = false;
         }
-
-        int index = getCurrentPathProgress();
-        switch (mbfState.state_) {
-            case actionlib::SimpleClientGoalState::ACTIVE:
-            case actionlib::SimpleClientGoalState::PENDING:
-                // currently moving. Cancel as soon as we're in the station
-                if (last_status.v_charge > 5.0) {
-                    ROS_INFO_STREAM("Got a voltage of " << last_status.v_charge << " V. Cancelling goal.");
-                    client->cancelAllGoals();
-                    stopMoving();
-                    goalSuccess = true;
-                    waitingForResult = false;
-                    continue;
-                }
-                if (index != old_index) {
-                    last_index_time = ros::Time::now();
-                    old_index = index;
-                } else {
-                    if (!this->hasGoodGPS() || isEmergencyMode()) {
-                        if (!this->hasGoodGPS())
-                            ROS_WARN_STREAM_THROTTLE(10, "Behavior: (execute_goal) - No GPS signal, waiting.");
-                        if (isEmergencyMode())
-                            ROS_WARN_STREAM_THROTTLE(10, "Behavior: (execute_goal) - Emergency mode, waiting.");
-                        last_index_time = ros::Time::now();
-                    } else {
-                        if ((ros::Time::now() - last_index_time).toSec() > 30.0) {
-                            ROS_ERROR_STREAM("Behavior: (execute_goal) - No progress for 30 seconds, stopping path execution. HasGoodGPS=" << this->hasGoodGPS());
-                            mbfClient->cancelAllGoals();
-                            stopMoving();
-                            goalSuccess = false;
-                            waitingForResult = false;
-                            continue;
-                        }
-                    }
-                }
-                ROS_INFO_STREAM_THROTTLE(5, "Behavior: Goal Progress: " << index);
-                
-                break;
-            case actionlib::SimpleClientGoalState::SUCCEEDED:
-                // we stopped moving because the path has ended. check, if we have docked successfully
-                if (last_status.v_charge > 5.0) {
-                    ROS_INFO_STREAM("Goal stopped, because we reached end pose. Voltage was " << last_status.v_charge << " V.");
-                    client->cancelAllGoals();
-                    stopMoving();
-                } else {
-                    ROS_INFO_STREAM("Behavior: Goal reached");
-                }
-                goalSuccess = true;
-                waitingForResult = false;
-                break;
-            default:
-                ROS_WARN_STREAM("Some error during path execution. Goal failed. status value was: "
-                                        << mbfState.state_);
-                waitingForResult = false;
-                stopMoving();
-                break;
-        }
+        // progress_result == 0 -> continue normally
     }
     return goalSuccess;
 }

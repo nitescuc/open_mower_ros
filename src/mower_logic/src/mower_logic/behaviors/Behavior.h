@@ -65,20 +65,27 @@ protected:
     std::shared_ptr<sSharedState> shared_state;
 
     /**
+     * Called during goal execution to allow derived classes to influence the execution based on state.
+     * Base implementation handles abort flag, charging detection, GPS/emergency timeout, and progress monitoring.
+     * 
+     * @param state The current action state (SimpleClientGoalState::state_)
+     * @return < 0 to treat as error (cancel + fail), > 0 to treat as success (cancel + succeed), 0 to continue normally
+     */
+    virtual int on_progress(int state);
+
+    /**
      * Execute a goal using MBF (Move Base Flex) with progress monitoring and error handling.
      * This method sends a goal to the MoveBase action client and monitors its execution,
      * handling GPS loss, emergency mode, and charging detection.
+     * Calls on_progress() to allow derived classes to influence execution.
      * 
      * @param client The MoveBase action client to use
      * @param goal The goal to execute
      * @return true if the goal was successfully reached or charging detected, false otherwise
      */
-    // Optional callback gets the current action state (SimpleClientGoalState::state_) as int and returns:
-    // < 0 => treat as error (cancel + fail), > 0 => treat as success (cancel + succeed), 0 => ignore and continue
     bool execute_goal(
         actionlib::SimpleActionClient<mbf_msgs::MoveBaseAction> *client,
-        mbf_msgs::MoveBaseGoal goal,
-        const std::function<int(int)> &state_cb = nullptr
+        mbf_msgs::MoveBaseGoal goal
     );
 
     /**
@@ -91,8 +98,7 @@ protected:
      */
     bool drive_to_position(
         const geometry_msgs::PoseStamped& target_pose,
-        const std::string& controller = "FTCPlanner",
-        const std::function<int(int)> &state_cb = nullptr
+        const std::string& controller = "FTCPlanner"
     );
 
     /**
