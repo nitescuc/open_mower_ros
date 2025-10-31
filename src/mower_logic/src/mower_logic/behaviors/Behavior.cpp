@@ -23,6 +23,7 @@ extern mower_msgs::Status getStatus();
 extern void stopMoving();
 extern bool isEmergencyMode();
 extern int getCurrentPathProgress();
+extern bool setGPSRtkFloat(bool enabled);
 extern actionlib::SimpleActionClient<mbf_msgs::MoveBaseAction> *mbfClient;
 
 int Behavior::on_progress(int state) {
@@ -98,11 +99,31 @@ int Behavior::on_progress(int state) {
     return 0; // Continue normally
 }
 
-bool Behavior::drive_to_position(const geometry_msgs::PoseStamped& target_pose, const std::string& controller) {
+bool Behavior::drive_to_position(const geometry_msgs::PoseStamped& target_pose, const std::string& controller, int retry_count) {
     mbf_msgs::MoveBaseGoal moveBaseGoal;
     moveBaseGoal.target_pose = target_pose;
     moveBaseGoal.controller = controller;
-    return execute_goal(mbfClient, moveBaseGoal);
+    return execute_goal(mbfClient, moveBaseGoal, retry_count);
+}
+
+bool Behavior::waitForFixedGPS(double wait_time_seconds) {
+    // Require clean RTK fix (disable float)
+    setGPSRtkFloat(false);
+    
+    auto start = ros::Time::now();
+    while (start + ros::Duration(wait_time_seconds, 0) > ros::Time::now()) {
+        if (!ros::ok() || aborted) {
+            return false;
+        }
+        if (!isGPSFixed) {
+            start = ros::Time::now();
+            ROS_WARN_STREAM("Waiting for fixed GPS");
+        } else {
+            ROS_INFO_STREAM("GPS is fixed");
+        }
+        ros::Duration(1.0).sleep();
+    }
+    return true;
 }
 
 bool Behavior::execute_goal(actionlib::SimpleActionClient<mbf_msgs::MoveBaseAction> *client, mbf_msgs::MoveBaseGoal goal, int retry_count) {

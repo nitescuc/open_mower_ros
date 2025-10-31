@@ -109,12 +109,24 @@ protected:
      * 
      * @param target_pose The target pose to drive to
      * @param controller The controller to use (default: "FTCPlanner")
+     * @param retry_count Number of times to retry the goal on failure (default: 5)
      * @return true if the position was successfully reached, false otherwise
      */
     bool drive_to_position(
         const geometry_msgs::PoseStamped& target_pose,
-        const std::string& controller = "FTCPlanner"
+        const std::string& controller = "FTCPlanner",
+        int retry_count = 5
     );
+
+    /**
+     * Wait for GPS to achieve RTK fixed status for a continuous period.
+     * This method waits for GPS to be fixed for at least the specified wait time.
+     * If GPS loses fix during the waiting period, the timer resets.
+     * 
+     * @param wait_time_seconds Duration in seconds to wait for continuous fixed GPS
+     * @return true if fixed GPS was achieved for the full duration, false if aborted or ROS shutdown
+     */
+    bool waitForFixedGPS(double wait_time_seconds);
 
     /**
      * Called ONCE on state enter.

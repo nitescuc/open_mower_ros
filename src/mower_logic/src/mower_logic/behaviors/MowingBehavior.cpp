@@ -86,17 +86,6 @@ void MowingBehavior::checkLidarEnabled() {
 }
 
 Behavior *MowingBehavior::execute() {
-    // auto config = getConfig();
-    // clear path on start means we start in a given area from scratch
-    // if (config.clear_path_on_start) {
-    //     currentMowingArea = config.current_area; // start with configured area
-    //     currentMowingPath = 0;
-    //     currentMowingPathIndex = 0;
-    //     currentMowingPaths.clear();
-    //     config.clear_path_on_start = false;
-    //     setConfig(config);
-    // }
-
     shared_state->active_semiautomatic_task = true;
 
     while (ros::ok() && !aborted) {
@@ -113,9 +102,38 @@ Behavior *MowingBehavior::execute() {
         checkLidarEnabled();
 
         // goto fix point in area if available
-        if (areaConfig.has_fix_point) {
-            ROS_INFO_STREAM("MowingBehavior: Going to fix point in area: " << currentMowingArea);
-            //goto_fix_point_and_wait(areaConfig.fix_point);
+        if (areaConfig.has_fix_point && lastFixPointArea != currentMowingArea) {
+            ROS_INFO_STREAM("MowingBehavior: Going to fix point in area: " << currentMowingArea 
+                << " at (" << areaConfig.fix_point_x << ", " << areaConfig.fix_point_y << ")");
+            
+            // Create target pose from fix point coordinates
+            geometry_msgs::PoseStamped fix_point;
+            fix_point.header.frame_id = "map";
+            fix_point.header.stamp = ros::Time::now();
+            fix_point.pose.position.x = areaConfig.fix_point_x;
+            fix_point.pose.position.y = areaConfig.fix_point_y;
+            fix_point.pose.position.z = 0.0;
+            fix_point.pose.orientation.w = 1.0; // Default orientation
+            
+            // Drive to the fix point with 10 retries
+            if (drive_to_position(fix_point, "FTCPlanner", 10)) {
+                ROS_INFO_STREAM("MowingBehavior: Successfully reached fix point for area " << currentMowingArea);
+                
+                // Wait for GPS to achieve fixed RTK status
+                ROS_INFO_STREAM("MowingBehavior: Waiting for fixed GPS at fix point");
+                if (!waitForFixedGPS(config.gps_wait_time)) {
+                    ROS_WARN_STREAM("MowingBehavior: Failed to achieve fixed GPS at fix point or aborted");
+                    // Continue anyway - fixed GPS is preferred but not required for mowing
+                }
+            } else {
+                ROS_WARN_STREAM("MowingBehavior: Failed to reach fix point for area " << currentMowingArea);
+                // Continue anyway - the fix point is optional
+            }
+            
+            // Mark that we attempted this area's fix point
+            lastFixPointArea = currentMowingArea;
+            // Re-enable float RTK for mowing
+            setGPSRtkFloat(true);
         }
 
         if (currentMowingPaths.empty() && !create_mowing_plan(currentMowingArea)) {
@@ -151,6 +169,7 @@ Behavior *MowingBehavior::execute() {
 void MowingBehavior::enter() {
     skip_area = false;
     paused = aborted = false;
+    lastFixPointArea = -1; // Reset fix point tracking on enter
 
     // recalibrate gyro
     // calibrateGyro();
@@ -179,6 +198,7 @@ void MowingBehavior::reset() {
     // config.current_area = 0;
 
     currentMowingArea = 0;
+    lastFixPointArea = -1; // Reset fix point tracking on reset
     currentMowingPath = 0;
     currentMowingPathIndex = 0;
     // increase cumulative mowing angle offset increment

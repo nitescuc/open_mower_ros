@@ -48,21 +48,11 @@ bool DockingBehavior::approach_docking_point() {
             return false;
         }
         // now we want clean rtk fix
-        setGPSRtkFloat(false);
         // make sure gps is rtk fixed
         // waiting at least config.gps_wait_time seconds for good gps, with good gps during all the period
-        auto start = ros::Time::now();
-        while (start + ros::Duration(config.gps_wait_time, 0) > ros::Time::now()) {
-            if (!ros::ok() || aborted) {
-                return false;
-            }
-            if (!isGPSFixed) {
-                start = ros::Time::now();
-                ROS_WARN_STREAM("Waiting for fixed GPS");
-            } else {
-                ROS_INFO_STREAM("GPS is fixed");
-            }
-            ros::Duration(1.0).sleep();
+        if (!waitForFixedGPS(config.gps_wait_time)) {
+            ROS_ERROR_STREAM("Failed to achieve fixed GPS or aborted");
+            return false;
         }
     }
 

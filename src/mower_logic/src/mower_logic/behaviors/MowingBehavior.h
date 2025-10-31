@@ -46,6 +46,7 @@ private:
     int currentMowingPathIndex;
     std::string currentMowingPlanDigest;
     double currentMowingAngleIncrementSum;
+    int lastFixPointArea; // Track which area we last navigated to fix point for
 
 public:
     MowingBehavior();
