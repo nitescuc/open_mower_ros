@@ -32,6 +32,7 @@ extern bool setGPSRtkFloat(bool enabled);
 
 UndockingBehavior UndockingBehavior::INSTANCE(&MowingBehavior::INSTANCE);
 UndockingBehavior UndockingBehavior::RETRY_INSTANCE(&DockingBehavior::INSTANCE);
+UndockingBehavior UndockingBehavior::DRIVE_INSTANCE(&DriveBehavior::INSTANCE);
 
 std::string UndockingBehavior::state_name() {
     return "UNDOCKING";
@@ -108,36 +109,36 @@ Behavior *UndockingBehavior::execute() {
     }
 
     // Goto the fix point
-    if (config.gps_use_fix_point) {
-        ROS_INFO_STREAM("Reaching fix point");
-        // allow it no navigate with float rtk
-        setGPSRtkFloat(true);
-        bool hasGps = waitForGPS();
-        if (!hasGps) {
-            ROS_ERROR_STREAM("Could not get GPS.");
-            return &IdleBehavior::INSTANCE;
-        }
+    // if (config.gps_use_fix_point) {
+    //     ROS_INFO_STREAM("Reaching fix point");
+    //     // allow it no navigate with float rtk
+    //     setGPSRtkFloat(true);
+    //     bool hasGps = waitForGPS();
+    //     if (!hasGps) {
+    //         ROS_ERROR_STREAM("Could not get GPS.");
+    //         return &IdleBehavior::INSTANCE;
+    //     }
 
-        geometry_msgs::PoseStamped fix_point;
-        fix_point.header.frame_id = "map";
-        fix_point.pose.position.x = config.gps_fix_point_x;
-        fix_point.pose.position.y = config.gps_fix_point_y;
-        fix_point.pose.position.z = 0.0;
-        tf2::Quaternion quat;
-        quat.setRPY(0, 0, 0);
-        fix_point.pose.orientation = tf2::toMsg(quat);
-        mbf_msgs::MoveBaseGoal moveBaseGoal;
-        moveBaseGoal.target_pose = fix_point;
-        moveBaseGoal.controller = "FTCPlanner";
-        actionlib::SimpleActionClient<mbf_msgs::MoveBaseAction> undockMbfClient("/move_base_flex/move_base");
-        auto result = undockMbfClient.sendGoalAndWait(moveBaseGoal);
-        if (result.state_ != result.SUCCEEDED) {
-            ROS_ERROR_STREAM("Error reaching fix point");
-            return &IdleBehavior::INSTANCE;
-        }
-        // now we want clean rtk fix
-        setGPSRtkFloat(false);
-    }
+    //     geometry_msgs::PoseStamped fix_point;
+    //     fix_point.header.frame_id = "map";
+    //     fix_point.pose.position.x = config.gps_fix_point_x;
+    //     fix_point.pose.position.y = config.gps_fix_point_y;
+    //     fix_point.pose.position.z = 0.0;
+    //     tf2::Quaternion quat;
+    //     quat.setRPY(0, 0, 0);
+    //     fix_point.pose.orientation = tf2::toMsg(quat);
+    //     mbf_msgs::MoveBaseGoal moveBaseGoal;
+    //     moveBaseGoal.target_pose = fix_point;
+    //     moveBaseGoal.controller = "FTCPlanner";
+    //     actionlib::SimpleActionClient<mbf_msgs::MoveBaseAction> undockMbfClient("/move_base_flex/move_base");
+    //     auto result = undockMbfClient.sendGoalAndWait(moveBaseGoal);
+    //     if (result.state_ != result.SUCCEEDED) {
+    //         ROS_ERROR_STREAM("Error reaching fix point");
+    //         return &IdleBehavior::INSTANCE;
+    //     }
+    //     // now we want clean rtk fix
+    //     setGPSRtkFloat(false);
+    // }
 
     // stop the bot for now
     stopMoving();
@@ -216,6 +217,10 @@ void UndockingBehavior::command_s1() {
 }
 
 void UndockingBehavior::command_s2() {
+
+}
+
+void UndockingBehavior::command_drive() {
 
 }
 

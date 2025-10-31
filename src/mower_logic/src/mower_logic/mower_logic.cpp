@@ -19,6 +19,8 @@
 
 #include "ros/ros.h"
 #include "slic3r_coverage_planner/PlanPath.h"
+#include "path_optimizer/OptimizePaths.h"
+#include "path_optimizer/GetAreaConfig.h"
 #include "mower_map/GetMowingAreaSrv.h"
 #include "mower_map/GetDockingPointSrv.h"
 #include "mower_map/SetDockingPointSrv.h"
@@ -41,12 +43,14 @@
 #include "mower_logic/MowerLogicConfig.h"
 #include "behaviors/Behavior.h"
 #include "behaviors/IdleBehavior.h"
+#include "behaviors/DriveBehavior.h"
 #include "behaviors/AreaRecordingBehavior.h"
 #include "mower_msgs/HighLevelControlSrv.h"
 #include "std_msgs/String.h"
 #include "std_msgs/Bool.h"
 #include "mower_msgs/HighLevelStatus.h"
 #include "mower_msgs/StartInAreaSrv.h"
+#include "mower_msgs/DriveToPositionSrv.h"
 #include "mower_map/ClearMapSrv.h"
 #include "xbot_msgs/AbsolutePose.h"
 #include "robot_localization_om/GPSControlSrv.h"
@@ -59,7 +63,8 @@
 #include "robot_localization/SetPose.h"
 
 ros::ServiceClient pathClient, mapClient, dockingPointClient, gpsClient, mowClient;
-ros::ServiceClient emergencyClient, pathProgressClient, setNavPointClient, clearNavPointClient, clearMapClient, positioningClient; 
+ros::ServiceClient emergencyClient, pathProgressClient, setNavPointClient, clearNavPointClient, clearMapClient, positioningClient;
+ros::ServiceClient pathOptimizerClient, areaConfigClient; 
 ros::ServiceClient actionRegistrationClient, hectorMapperPauseClient, lidarControlClient;
 
 ros::NodeHandle *n;
@@ -148,6 +153,18 @@ nav_msgs::Odometry getOdometry() {
 
 
 void setEmergencyMode(bool emergency);
+
+int getCurrentPathProgress()
+{
+    ftc_local_planner::PlannerGetProgress progressSrv;
+    int currentIndex = -1;
+    if(pathProgressClient.call(progressSrv)) {
+        currentIndex = progressSrv.response.index;
+    } else {
+        ROS_ERROR("getCurrentPathProgress() - Error getting progress from FTC planner");
+    }
+    return(currentIndex);
+}
 
 void registerActions(std::string prefix, const std::vector<xbot_msgs::ActionInfo> &actions) {
     xbot_msgs::RegisterActionsSrv srv;
@@ -625,7 +642,7 @@ void checkSafety(const ros::TimerEvent &timer_event) {
         setLastGoodGPS(ros::Time::now());
         // high_level_status.gps_quality_percent = 1.0 - fmin(1.0, last_pose.position_accuracy / last_config.max_position_accuracy);
         high_level_status.gps_quality_percent = fmin(1.0, last_odometry.pose.covariance[0] / last_config.gps_max_covariance);
-        ROS_INFO_STREAM_THROTTLE(10, "GPS quality: " << high_level_status.gps_quality_percent);
+        // ROS_INFO_STREAM_THROTTLE(10, "GPS quality: " << high_level_status.gps_quality_percent);
     } else {
         // GPS = bad, set quality to 0
         high_level_status.gps_quality_percent = 0;
@@ -701,18 +718,45 @@ void reconfigureCB(mower_logic::MowerLogicConfig &c, uint32_t level) {
 
 bool startInAreaCommand(mower_msgs::StartInAreaSrvRequest &req, mower_msgs::StartInAreaSrvResponse &res) {
     ROS_INFO_STREAM("Starting in area " << req.area << ". Clearing path on start");
-    // reset mowing behavior otherwise it will continue where it left off
-//    MowingBehavior::INSTANCE.reset();
-    // set the current area
-    auto cfg = getConfig();
-    cfg.current_area = req.area;
-    cfg.clear_path_on_start = true;
-    setConfig(cfg);
+    MowingBehavior::INSTANCE.set_start_area(req.area);
+//     auto cfg = getConfig();
+//     cfg.current_area = req.area;
+//     cfg.clear_path_on_start = true;
+//     setConfig(cfg);
     // start
     if (currentBehavior) {
         ROS_INFO_STREAM("Current behavior exists: " << currentBehavior->state_name());
         currentBehavior->command_start();
     }
+    return true;
+}
+
+bool driveToPositionCommand(mower_msgs::DriveToPositionSrvRequest &req, mower_msgs::DriveToPositionSrvResponse &res) {
+    ROS_INFO_STREAM("Driving to position x=" << req.x << ", y=" << req.y);
+    
+    // Create a PoseStamped with the target position
+    geometry_msgs::PoseStamped target_pose;
+    target_pose.header.frame_id = "map";
+    target_pose.header.stamp = ros::Time::now();
+    target_pose.pose.position.x = req.x;
+    target_pose.pose.position.y = req.y;
+    target_pose.pose.position.z = 0.0;
+    
+    // Set orientation to current orientation (or could calculate based on current position)
+    target_pose.pose.orientation.x = 0.0;
+    target_pose.pose.orientation.y = 0.0;
+    target_pose.pose.orientation.z = 0.0;
+    target_pose.pose.orientation.w = 1.0;
+    
+    // Set the target point in DriveBehavior
+    DriveBehavior::INSTANCE.set_point(target_pose);
+    
+    // Trigger the drive command
+    if (currentBehavior) {
+        ROS_INFO_STREAM("Current behavior: " << currentBehavior->state_name() << ", switching to drive");
+        currentBehavior->command_drive();
+    }
+    
     return true;
 }
 
@@ -820,6 +864,10 @@ int main(int argc, char **argv) {
 
     pathClient = n->serviceClient<slic3r_coverage_planner::PlanPath>(
             "slic3r_coverage_planner/plan_path");
+    pathOptimizerClient = n->serviceClient<path_optimizer::OptimizePaths>(
+            "/optimize");
+    areaConfigClient = n->serviceClient<path_optimizer::GetAreaConfig>(
+            "/get_area_config");
     mapClient = n->serviceClient<mower_map::GetMowingAreaSrv>(
             "mower_map_service/get_mowing_area");
     clearMapClient = n->serviceClient<mower_map::ClearMapSrv>(
@@ -870,6 +918,7 @@ int main(int argc, char **argv) {
 
     ros::ServiceServer high_level_control_srv = n->advertiseService("mower_service/high_level_control", highLevelCommand);
     ros::ServiceServer start_in_area_srv = n->advertiseService("mower_service/start_in_area", startInAreaCommand);
+    ros::ServiceServer drive_to_position_srv = n->advertiseService("mower_service/drive_to_position", driveToPositionCommand);
 
 
     ros::AsyncSpinner asyncSpinner(1);

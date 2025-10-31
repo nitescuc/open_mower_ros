@@ -20,13 +20,24 @@
 #include "ros/ros.h"
 #include "mower_logic/MowerLogicConfig.h"
 #include "mower_msgs/HighLevelStatus.h"
+#include <actionlib/client/simple_action_client.h>
+#include <mbf_msgs/MoveBaseAction.h>
+#include <geometry_msgs/PoseStamped.h>
 #include <atomic>
 #include <memory>
+#include <functional>
 
 enum eAutoMode {
     MANUAL = 0,
     SEMIAUTO = 1,
     AUTO = 2
+};
+
+// Progress error codes returned by on_progress()
+// Keep values negative to fit existing contract: <0 error, >0 success, 0 continue
+enum ProgressError {
+    PROGRESS_ERROR_UNRECOVERABLE = -1, // e.g., explicit abort; do not retry
+    PROGRESS_ERROR_RECOVERABLE   = -2  // e.g., transient failure; retry allowed
 };
 
 struct sSharedState {
@@ -59,6 +70,63 @@ protected:
 
     mower_logic::MowerLogicConfig config;
     std::shared_ptr<sSharedState> shared_state;
+
+    /**
+     * Called during goal execution to allow derived classes to influence the execution based on state.
+     * Base implementation handles abort flag, charging detection, GPS/emergency timeout, and progress monitoring.
+     * 
+     * Return codes contract:
+     *  - Behavior::PROGRESS_ERROR_UNRECOVERABLE (-1): unrecoverable error (e.g., abort) -> cancel and do NOT retry
+     *  - Behavior::PROGRESS_ERROR_RECOVERABLE   (-2): recoverable error (e.g., transient timeout) -> cancel and MAY retry
+     *  - 0: continue monitoring
+     *  - >0: success -> cancel and succeed
+     *
+     * @param state The current action state (SimpleClientGoalState::state_)
+     */
+    virtual int on_progress(int state);
+
+    /**
+     * Execute a goal using MBF (Move Base Flex) with progress monitoring and error handling.
+     * This method sends a goal to the MoveBase action client and monitors its execution,
+     * handling GPS loss, emergency mode, and charging detection.
+     * Calls on_progress() to allow derived classes to influence execution.
+     * Retries the goal up to retry_count times unless succeeded or aborted.
+     * 
+     * @param client The MoveBase action client to use
+     * @param goal The goal to execute
+     * @param retry_count Number of times to retry the goal on failure (default: 5)
+     * @return true if the goal was successfully reached or charging detected, false otherwise
+     */
+    bool execute_goal(
+        actionlib::SimpleActionClient<mbf_msgs::MoveBaseAction> *client,
+        mbf_msgs::MoveBaseGoal goal,
+        int retry_count = 5
+    );
+
+    /**
+     * Drive to a specific position using the default controller.
+     * This is a convenience method that creates a MoveBaseGoal from a PoseStamped and executes it.
+     * 
+     * @param target_pose The target pose to drive to
+     * @param controller The controller to use (default: "FTCPlanner")
+     * @param retry_count Number of times to retry the goal on failure (default: 5)
+     * @return true if the position was successfully reached, false otherwise
+     */
+    bool drive_to_position(
+        const geometry_msgs::PoseStamped& target_pose,
+        const std::string& controller = "FTCPlanner",
+        int retry_count = 5
+    );
+
+    /**
+     * Wait for GPS to achieve RTK fixed status for a continuous period.
+     * This method waits for GPS to be fixed for at least the specified wait time.
+     * If GPS loses fix during the waiting period, the timer resets.
+     * 
+     * @param wait_time_seconds Duration in seconds to wait for continuous fixed GPS
+     * @return true if fixed GPS was achieved for the full duration, false if aborted or ROS shutdown
+     */
+    bool waitForFixedGPS(double wait_time_seconds);
 
     /**
      * Called ONCE on state enter.
@@ -188,6 +256,7 @@ public:
     virtual void command_start() = 0;
     virtual void command_s1() = 0;
     virtual void command_s2() = 0;
+    virtual void command_drive() = 0;
 
     virtual uint8_t get_sub_state() = 0;
     virtual uint8_t get_state() = 0;

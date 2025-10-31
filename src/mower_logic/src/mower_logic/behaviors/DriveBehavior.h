@@ -14,38 +14,29 @@
 // SOFTWARE.
 //
 //
-#ifndef SRC_UNDOCKINGBEHAVIOR_H
-#define SRC_UNDOCKINGBEHAVIOR_H
+#ifndef SRC_DRIVEBEHAVIOR_H
+#define SRC_DRIVEBEHAVIOR_H
 
-#include <actionlib/client/simple_action_client.h>
-#include <mbf_msgs/ExePathAction.h>
 #include "Behavior.h"
 #include "IdleBehavior.h"
-#include "DockingBehavior.h"
-#include "DriveBehavior.h"
-#include "ros/ros.h"
-#include <tf2/LinearMath/Transform.h>
-#include "tf2_geometry_msgs/tf2_geometry_msgs.h"
-#include "MowingBehavior.h"
-#include "xbot_msgs/AbsolutePose.h"
+#include <geometry_msgs/PoseStamped.h>
 
-
-class UndockingBehavior : public Behavior {
+class DriveBehavior : public Behavior {
 public:
-    static UndockingBehavior INSTANCE;
-    static UndockingBehavior RETRY_INSTANCE;
-    static UndockingBehavior DRIVE_INSTANCE;
+    static DriveBehavior INSTANCE;
 
-    UndockingBehavior(Behavior* nextBehavior);
 private:
-    Behavior* nextBehavior;
-    geometry_msgs::PoseStamped docking_pose_stamped;
-    bool gpsRequired;
-
-    bool waitForGPS();
-
+    geometry_msgs::PoseStamped target_pose;
+    bool has_target;
+    bool should_dock;
 
 public:
+    /**
+     * Set the target position to drive to.
+     * @param position The target pose to drive to
+     */
+    void set_point(const geometry_msgs::PoseStamped& position);
+
     std::string state_name() override;
 
     Behavior *execute() override;
@@ -79,5 +70,4 @@ public:
     void handle_action(std::string action) override;
 };
 
-
-#endif //SRC_UNDOCKINGBEHAVIOR_H
+#endif //SRC_DRIVEBEHAVIOR_H

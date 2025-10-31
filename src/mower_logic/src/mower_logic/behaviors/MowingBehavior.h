@@ -46,6 +46,7 @@ private:
     int currentMowingPathIndex;
     std::string currentMowingPlanDigest;
     double currentMowingAngleIncrementSum;
+    int lastFixPointArea; // Track which area we last navigated to fix point for
 
 public:
     MowingBehavior();
@@ -74,6 +75,8 @@ public:
 
     void command_s2() override;
 
+    void command_drive() override;
+
     bool redirect_joystick() override;
 
     uint8_t get_sub_state() override;
@@ -87,6 +90,8 @@ public:
     void checkpoint();
 
     bool restore_checkpoint();
+
+    void set_start_area(int area);
 };
 
 

@@ -30,6 +30,7 @@ private:
     bool manual_start_mowing = false;
     bool start_area_recorder = false;
     bool start_docking = false;
+    bool start_drive = false;
     std::vector<xbot_msgs::ActionInfo> actions;
 
 public:
@@ -58,6 +59,8 @@ public:
     void command_s1() override;
 
     void command_s2() override;
+
+    void command_drive() override;
 
     bool redirect_joystick() override;
 

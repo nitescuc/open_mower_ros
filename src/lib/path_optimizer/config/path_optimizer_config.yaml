@@ -1,0 +1,35 @@
+# Path Optimizer Configuration
+
+# Optimization method to use
+# Options: douglas_peucker, spline, combined, mowing_specific
+optimization_method: "combined"
+
+# Tolerance for optimization algorithms (meters)
+# Smaller values = more accurate but less optimization
+# Larger values = more optimization but less accurate
+tolerance: 0.1
+
+# Maximum iterations for iterative algorithms
+max_iterations: 100
+
+# Mowing-specific parameters
+mowing_params:
+  # Minimum turning radius for the mower (meters)
+  min_turn_radius: 0.5
+  
+  # Minimum segment length (meters)
+  min_segment_length: 0.05
+  
+  # Maximum turn angle before curve smoothing (radians)
+  max_sharp_turn: 2.2  # ~126 degrees
+
+# Topic configuration
+topics:
+  input_path: "/mower_logic/mowing_path"
+  output_path: "/path_optimizer/optimized_path"
+
+# Debug and logging
+debug:
+  enable_statistics: true
+  log_optimization_time: true
+  publish_statistics: false

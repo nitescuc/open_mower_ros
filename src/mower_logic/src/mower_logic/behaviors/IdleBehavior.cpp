@@ -16,6 +16,7 @@
 //
 #include "IdleBehavior.h"
 #include "PerimeterDocking.h"
+#include "DriveBehavior.h"
 
 extern void stopMoving();
 extern void stopBlade();
@@ -94,6 +95,16 @@ Behavior *IdleBehavior::execute() {
             return &DockingBehavior::INSTANCE;
         }
 
+        if (start_drive) {
+            start_drive = false;
+            if(last_status.v_charge > 5.0) {
+                ROS_INFO_STREAM("Currently inside the docking station, we set the robot's pose to the docks pose.");
+                setRobotPoseDocked();
+                return &UndockingBehavior::DRIVE_INSTANCE;
+            }
+            return &DriveBehavior::INSTANCE;
+        }
+
         // This gets called if we need to refresh, e.g. on clearing maps
         if(aborted) {
             return &IdleBehavior::INSTANCE;
@@ -107,6 +118,7 @@ Behavior *IdleBehavior::execute() {
 
 void IdleBehavior::enter() {
     start_area_recorder = false;
+    start_drive = false;
     // Reset the docking behavior, to allow docking
     DockingBehavior::INSTANCE.reset();
 
@@ -158,6 +170,11 @@ void IdleBehavior::command_s1() {
 
 void IdleBehavior::command_s2() {
     
+}
+
+void IdleBehavior::command_drive() {
+    start_drive = true;
+    abort();
 }
 
 bool IdleBehavior::redirect_joystick() {

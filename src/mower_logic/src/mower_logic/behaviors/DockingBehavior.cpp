@@ -31,98 +31,6 @@ extern void setLidarEnabled(bool enabled);
 
 DockingBehavior DockingBehavior::INSTANCE;
 
-int getDockingMowPathIndex()
-{
-    ftc_local_planner::PlannerGetProgress progressSrv;
-    int currentIndex = -1;
-    if(pathProgressClient.call(progressSrv)) {
-        currentIndex = progressSrv.response.index;
-    } else {
-        ROS_ERROR("MowingBehavior: getMowIndex() - Error getting progress from FTC planner");
-    }
-    return(currentIndex);
-}
-
-bool DockingBehavior::execute_goal(actionlib::SimpleActionClient<mbf_msgs::MoveBaseAction> *client, mbf_msgs::MoveBaseGoal goal) {
-    client->sendGoal(goal);
-
-    bool goalSuccess = false;
-    bool waitingForResult = true;
-
-    ros::Rate r(10);
-
-    // we can assume the last_state is current since we have a security timer
-    int old_index = -1;
-    ros::Time last_index_time = ros::Time::now();
-    while (waitingForResult) {
-
-        r.sleep();
-
-        const auto last_status = getStatus();
-        auto mbfState = client->getState();
-
-        if(aborted) {
-            ROS_INFO_STREAM("Docking aborted.");
-            client->cancelGoal();
-            stopMoving();
-            goalSuccess = false;
-            waitingForResult = false;
-        }
-
-        switch (mbfState.state_) {
-            case actionlib::SimpleClientGoalState::ACTIVE:
-            case actionlib::SimpleClientGoalState::PENDING:
-                // currently moving. Cancel as soon as we're in the station
-                if (last_status.v_charge > 5.0) {
-                    ROS_INFO_STREAM("Got a voltage of " << last_status.v_charge << " V. Cancelling docking.");
-                    client->cancelGoal();
-                    stopMoving();
-                    goalSuccess = true;
-                    waitingForResult = false;
-                } else {
-                    int index = getDockingMowPathIndex();
-                    if ((index != old_index) || !this->hasGoodGPS() || isEmergencyMode()) {
-                        if (!this->hasGoodGPS())
-                            ROS_WARN_STREAM_THROTTLE(10, "DockingBehavior: (FIRST POINT) - No GPS signal, waiting.");
-                        if (isEmergencyMode())
-                            ROS_WARN_STREAM_THROTTLE(10, "DockingBehavior: (FIRST POINT) - Emergency mode, waiting.");
-                        last_index_time = ros::Time::now();
-                        old_index = index;
-                    } else {
-                        if (((ros::Time::now() - last_index_time).toSec() > 30.0) && !(this->paused || this->requested_pause_flag) && this->hasGoodGPS()) {
-                            ROS_ERROR_STREAM("DockingBehavior: (FIRST POINT) - No progress for 30 seconds, stopping path execution.");
-                            client->cancelAllGoals();
-                            stopMoving();
-                            goalSuccess = false;
-                            waitingForResult = false;
-                        }
-                    }
-                    ROS_INFO_STREAM_THROTTLE(5, "DockingBehavior: Goal Progress: " << index);
-                }
-                break;
-            case actionlib::SimpleClientGoalState::SUCCEEDED:
-                // we stopped moving because the path has ended. check, if we have docked successfully
-                if (last_status.v_charge > 5.0) {
-                    ROS_INFO_STREAM("Docking stopped, because we reached end pose. Voltage was " << last_status.v_charge << " V.");
-                    client->cancelGoal();
-                    stopMoving();
-                } else {
-                    ROS_INFO_STREAM("DockingBehavior: Goal reached");
-                }
-                goalSuccess = true;
-                waitingForResult = false;
-                break;
-            default:
-                ROS_WARN_STREAM("Some error during path execution. Docking failed. status value was: "
-                                        << mbfState.state_);
-                waitingForResult = false;
-                stopMoving();
-                break;
-        }
-    }
-    return goalSuccess;
-}
-
 bool DockingBehavior::approach_docking_point() {
     ROS_INFO_STREAM("Calculating approach path");
 
@@ -135,29 +43,16 @@ bool DockingBehavior::approach_docking_point() {
         geometry_msgs::PoseStamped fix_point = docking_pose_stamped;
         fix_point.pose.position.x = config.gps_fix_point_x;
         fix_point.pose.position.y = config.gps_fix_point_y;
-        mbf_msgs::MoveBaseGoal moveBaseGoal;
-        moveBaseGoal.target_pose = fix_point;
-        moveBaseGoal.controller = "FTCPlanner";
-        if (!execute_goal(mbfClient, moveBaseGoal)) {
+        if (!drive_to_position(fix_point, "FTCPlanner")) {
             ROS_ERROR_STREAM("Error reaching fix point");
             return false;
         }
         // now we want clean rtk fix
-        setGPSRtkFloat(false);
         // make sure gps is rtk fixed
         // waiting at least config.gps_wait_time seconds for good gps, with good gps during all the period
-        auto start = ros::Time::now();
-        while (start + ros::Duration(config.gps_wait_time, 0) > ros::Time::now()) {
-            if (!ros::ok() || aborted) {
-                return false;
-            }
-            if (!isGPSFixed) {
-                start = ros::Time::now();
-                ROS_WARN_STREAM("Waiting for fixed GPS");
-            } else {
-                ROS_INFO_STREAM("GPS is fixed");
-            }
-            ros::Duration(1.0).sleep();
+        if (!waitForFixedGPS(config.gps_wait_time)) {
+            ROS_ERROR_STREAM("Failed to achieve fixed GPS or aborted");
+            return false;
         }
     }
 
@@ -173,10 +68,7 @@ bool DockingBehavior::approach_docking_point() {
         geometry_msgs::PoseStamped docking_approach_point = docking_pose_stamped;
         docking_approach_point.pose.position.x -= cos(yaw) * config.docking_approach_distance;
         docking_approach_point.pose.position.y -= sin(yaw) * config.docking_approach_distance;
-        mbf_msgs::MoveBaseGoal moveBaseGoal;
-        moveBaseGoal.target_pose = docking_approach_point;
-        moveBaseGoal.controller = "FTCPlanner";
-        if (!execute_goal(mbfClient, moveBaseGoal)) {
+        if (!drive_to_position(docking_approach_point, "FTCPlanner")) {
             return false;
         }
     }
@@ -410,6 +302,10 @@ void DockingBehavior::command_s1() {
 }
 
 void DockingBehavior::command_s2() {
+
+}
+
+void DockingBehavior::command_drive() {
 
 }
 

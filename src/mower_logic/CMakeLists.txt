@@ -16,6 +16,7 @@ find_package(catkin REQUIRED COMPONENTS
   nav_msgs
   roscpp
   slic3r_coverage_planner
+  path_optimizer
   tf2
   tf2_geometry_msgs
   tf2_ros
@@ -169,6 +170,7 @@ include_directories(
 add_executable(mower_logic
         src/mower_logic/mower_logic.cpp
         src/mower_logic/behaviors/Behavior.h
+        src/mower_logic/behaviors/Behavior.cpp
         src/mower_logic/behaviors/DockingBehavior.h
         src/mower_logic/behaviors/DockingBehavior.cpp
         src/mower_logic/behaviors/UndockingBehavior.h
@@ -181,6 +183,8 @@ add_executable(mower_logic
         src/mower_logic/behaviors/PerimeterDocking.cpp
         src/mower_logic/behaviors/AreaRecordingBehavior.h
         src/mower_logic/behaviors/AreaRecordingBehavior.cpp
+        src/mower_logic/behaviors/DriveBehavior.h
+        src/mower_logic/behaviors/DriveBehavior.cpp
         )
 add_dependencies(mower_logic ${catkin_EXPORTED_TARGETS} ${${PROJECT_NAME}_EXPORTED_TARGETS})
 target_link_libraries(mower_logic ${catkin_LIBRARIES})

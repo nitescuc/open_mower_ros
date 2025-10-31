@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- Path Optimizer Service Test Launch File -->
+    
+    <!-- Launch the path optimizer node -->
+    <include file="$(find path_optimizer)/launch/path_optimizer.launch">
+        <arg name="optimization_method" value="combined" />
+        <arg name="tolerance" value="0.1" />
+    </include>
+    
+    <!-- Wait a moment then run the test -->
+    <node name="path_optimizer_service_test" 
+          pkg="path_optimizer" 
+          type="test_optimization_service.py" 
+          output="screen"
+          launch-prefix="bash -c 'sleep 2; $0 $@' " />
+    
+    <!-- Optional: Launch RViz for visualization -->
+    <!-- 
+    <node name="rviz" pkg="rviz" type="rviz" args="-d $(find path_optimizer)/config/path_optimizer.rviz" />
+    -->
+    
+</launch>
