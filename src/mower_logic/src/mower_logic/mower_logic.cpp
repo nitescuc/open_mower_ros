@@ -32,6 +32,7 @@
 #include "mbf_msgs/MoveBaseAction.h"
 #include "nav_msgs/Odometry.h"
 #include "nav_msgs/Path.h"
+#include "nav_msgs/OccupancyGrid.h"
 #include "tf2_geometry_msgs/tf2_geometry_msgs.h"
 #include <tf2_ros/transform_listener.h>
 #include "mower_msgs/Status.h"
@@ -82,6 +83,7 @@ mower_logic::MowerLogicConfig last_config;
 ros::Time pose_time(0.0);
 xbot_msgs::AbsolutePose last_pose;
 nav_msgs::Odometry last_odometry;
+nav_msgs::OccupancyGrid::ConstPtr last_costmap;
 ros::Time last_filter_init(0.0), last_fixed_gps(0.0), last_float_gps(0.0), last_good_odometry(0.0), last_amcl_init(0.0);
 ros::Time status_time(0.0);
 ros::Time last_bumper_left_nok(0.0), last_bumper_left_ok(0.0), last_bumper_right_nok(0.0), last_bumper_right_ok(0.0);
@@ -296,6 +298,18 @@ void statusReceived(const mower_msgs::Status::ConstPtr &msg) {
 #endif
     last_status = *msg;
     status_time = ros::Time::now();
+}
+
+void costmapReceived(const nav_msgs::OccupancyGrid::ConstPtr &msg) {
+    std::lock_guard<std::recursive_mutex> lk{mower_logic_mutex};
+    last_costmap = msg;
+    ROS_DEBUG_STREAM_THROTTLE(10, "Costmap received: " << msg->info.width << "x" << msg->info.height 
+                               << " resolution: " << msg->info.resolution);
+}
+
+nav_msgs::OccupancyGrid::ConstPtr getCostmap() {
+    std::lock_guard<std::recursive_mutex> lk{mower_logic_mutex};
+    return last_costmap;
 }
 
 // Abort the currently running behaviour
@@ -911,6 +925,7 @@ int main(int argc, char **argv) {
     ros::Subscriber status_sub = n->subscribe("/mower/status", 0, statusReceived, ros::TransportHints().tcpNoDelay(true));
     ros::Subscriber gps_pose_sub = n->subscribe("/xbot_driver_gps/xb_pose", 0, gpsPoseReceived, ros::TransportHints().tcpNoDelay(true));
     ros::Subscriber odom_sub = n->subscribe("/odometry_map/filtered", 0, odomReceived, ros::TransportHints().tcpNoDelay(true));
+    ros::Subscriber costmap_sub = n->subscribe("/move_base_flex/global_costmap/costmap", 1, costmapReceived);
     ros::Subscriber joy_cmd = n->subscribe("/joy_vel", 0, joyVelReceived, ros::TransportHints().tcpNoDelay(true));
     ros::Subscriber action = n->subscribe("xbot/action", 0, actionReceived, ros::TransportHints().tcpNoDelay(true));
     ros::Subscriber bumper_left = n->subscribe("/bumper/left", 0, bumperLeftReceived, ros::TransportHints().tcpNoDelay(true));

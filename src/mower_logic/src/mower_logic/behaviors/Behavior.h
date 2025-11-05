@@ -23,6 +23,7 @@
 #include <actionlib/client/simple_action_client.h>
 #include <mbf_msgs/MoveBaseAction.h>
 #include <geometry_msgs/PoseStamped.h>
+#include <nav_msgs/OccupancyGrid.h>
 #include <atomic>
 #include <memory>
 #include <functional>
@@ -51,6 +52,13 @@ class Behavior {
 
 private:
     ros::Time startTime;
+    ros::Subscriber costmap_sub;
+    nav_msgs::OccupancyGrid::ConstPtr current_costmap;
+
+    void costmapCallback(const nav_msgs::OccupancyGrid::ConstPtr& msg) {
+        current_costmap = msg;
+        ROS_DEBUG_STREAM_THROTTLE(5, "Behavior: Received costmap update: " << msg->info.width << "x" << msg->info.height);
+    }
 
 protected:
     std::atomic<bool> aborted;
@@ -127,6 +135,23 @@ protected:
      * @return true if fixed GPS was achieved for the full duration, false if aborted or ROS shutdown
      */
     bool waitForFixedGPS(double wait_time_seconds);
+
+    /**
+     * Check if the robot's current position has lethal cost on the costmap.
+     * This method gets the robot's current position from odometry and checks if the
+     * corresponding cell in the costmap has a cost >= LETHAL_OBSTACLE.
+     * 
+     * @return true if current position is on a lethal obstacle, false otherwise (or if costmap unavailable)
+     */
+    bool isCurrentPositionLethal();
+
+    /**
+     * Get the current costmap.
+     * @return Pointer to the current costmap, or nullptr if no costmap has been received yet
+     */
+    nav_msgs::OccupancyGrid::ConstPtr getCostmap() const {
+        return current_costmap;
+    }
 
     /**
      * Called ONCE on state enter.
@@ -211,6 +236,25 @@ public:
         startTime = ros::Time::now();
         isGPSGood = false;
         sub_state = 0;
+        
+        // Subscribe to costmap if not already subscribed
+        if (!costmap_sub) {
+            ros::NodeHandle nh;
+            costmap_sub = nh.subscribe("/move_base_flex/global_costmap/costmap", 1, &Behavior::costmapCallback, this);
+            ROS_INFO_STREAM("Behavior: Subscribed to costmap topic");
+        }
+        
+        // Wait briefly for initial costmap
+        ros::Duration(0.5).sleep();
+        ros::spinOnce();
+        
+        if (current_costmap) {
+            ROS_INFO_STREAM("Behavior: Costmap available: " << current_costmap->info.width << "x" << current_costmap->info.height 
+                           << " resolution: " << current_costmap->info.resolution);
+        } else {
+            ROS_WARN_STREAM("Behavior: No costmap received yet");
+        }
+        
         enter();
     }
 

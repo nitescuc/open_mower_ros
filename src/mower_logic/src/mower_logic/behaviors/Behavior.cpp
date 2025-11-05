@@ -17,6 +17,9 @@
 #include "Behavior.h"
 #include <actionlib/client/simple_action_client.h>
 #include <mbf_msgs/MoveBaseAction.h>
+#include <nav_msgs/OccupancyGrid.h>
+#include <nav_msgs/Odometry.h>
+#include <costmap_2d/cost_values.h>
 #include "mower_msgs/Status.h"
 
 extern mower_msgs::Status getStatus();
@@ -24,6 +27,8 @@ extern void stopMoving();
 extern bool isEmergencyMode();
 extern int getCurrentPathProgress();
 extern bool setGPSRtkFloat(bool enabled);
+extern nav_msgs::OccupancyGrid::ConstPtr getCostmap();
+extern nav_msgs::Odometry getOdometry();
 extern actionlib::SimpleActionClient<mbf_msgs::MoveBaseAction> *mbfClient;
 
 int Behavior::on_progress(int state) {
@@ -124,6 +129,50 @@ bool Behavior::waitForFixedGPS(double wait_time_seconds) {
         ros::Duration(1.0).sleep();
     }
     return true;
+}
+
+bool Behavior::isCurrentPositionLethal() {
+    auto costmap = getCostmap();
+    if (!costmap) {
+        ROS_WARN_STREAM_THROTTLE(5, "Behavior::isCurrentPositionLethal - No costmap available");
+        return false;
+    }
+    
+    auto odom = getOdometry();
+    double robot_x = odom.pose.pose.position.x;
+    double robot_y = odom.pose.pose.position.y;
+    
+    // Convert world coordinates to map coordinates
+    unsigned int mx, my;
+    double resolution = costmap->info.resolution;
+    double origin_x = costmap->info.origin.position.x;
+    double origin_y = costmap->info.origin.position.y;
+    
+    mx = (unsigned int)((robot_x - origin_x) / resolution);
+    my = (unsigned int)((robot_y - origin_y) / resolution);
+    
+    // Check if coordinates are within map bounds
+    if (mx >= costmap->info.width || my >= costmap->info.height) {
+        ROS_WARN_STREAM_THROTTLE(5, "Behavior::isCurrentPositionLethal - Position (" << robot_x << ", " << robot_y 
+                                  << ") is outside costmap bounds");
+        return false;
+    }
+    
+    unsigned int index = my * costmap->info.width + mx;
+    if (index >= costmap->data.size()) {
+        ROS_WARN_STREAM_THROTTLE(5, "Behavior::isCurrentPositionLethal - Index out of bounds");
+        return false;
+    }
+    
+    unsigned char cost = costmap->data[index];
+    bool is_lethal = (cost >= costmap_2d::LETHAL_OBSTACLE);
+    
+    if (is_lethal) {
+        ROS_WARN_STREAM("Behavior::isCurrentPositionLethal - Robot at position (" << robot_x << ", " << robot_y 
+                       << ") has lethal cost: " << (int)cost);
+    }
+    
+    return is_lethal;
 }
 
 bool Behavior::execute_goal(actionlib::SimpleActionClient<mbf_msgs::MoveBaseAction> *client, mbf_msgs::MoveBaseGoal goal, int retry_count) {

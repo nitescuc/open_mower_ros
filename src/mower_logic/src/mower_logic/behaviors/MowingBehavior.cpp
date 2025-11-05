@@ -613,6 +613,14 @@ bool MowingBehavior::execute_mowing_plan() {
             if (current_status.state_ != actionlib::SimpleClientGoalState::SUCCEEDED) {
                 // we cannot reach the start point
                 ROS_ERROR_STREAM("MowingBehavior: (FIRST POINT) - Could not reach goal (first point). Planner Status was: " << current_status.state_);
+                
+                // Check if robot is in high-cost position on costmap
+                if (isCurrentPositionLethal()) {
+                    ROS_WARN_STREAM("MowingBehavior: (FIRST POINT) - Robot is in lethal position. Pausing 1s and retrying.");
+                    ros::Duration(1.0).sleep();
+                    continue;
+                }
+                
                 // we have 3 attempts to get to the start pose of the mowing area
                 if (first_point_attempt_counter < config.max_first_point_attempts)
                 {
@@ -757,6 +765,13 @@ bool MowingBehavior::execute_mowing_plan() {
                 }
                 else
                 {
+                    // Check if robot is in high-cost position on costmap
+                    if (isCurrentPositionLethal()) {
+                        ROS_WARN_STREAM("MowingBehavior: - Robot is in lethal position. Pausing 1s and retrying.");
+                        ros::Duration(1.0).sleep();
+                        continue;
+                    }
+                    
                     // we didnt drive all points in the mow path, so we go into pause mode
                     // TODO: we should figure out the likely reason for our failure to complete the path
                     // if GPS -> PAUSE
