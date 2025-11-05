@@ -746,7 +746,7 @@ bool startInAreaCommand(mower_msgs::StartInAreaSrvRequest &req, mower_msgs::Star
 }
 
 bool driveToPositionCommand(mower_msgs::DriveToPositionSrvRequest &req, mower_msgs::DriveToPositionSrvResponse &res) {
-    ROS_INFO_STREAM("Driving to position x=" << req.x << ", y=" << req.y);
+    ROS_INFO_STREAM("Driving to position x=" << req.x << ", y=" << req.y << ", yaw=" << req.yaw);
     
     // Create a PoseStamped with the target position
     geometry_msgs::PoseStamped target_pose;
@@ -756,11 +756,12 @@ bool driveToPositionCommand(mower_msgs::DriveToPositionSrvRequest &req, mower_ms
     target_pose.pose.position.y = req.y;
     target_pose.pose.position.z = 0.0;
     
-    // Set orientation to current orientation (or could calculate based on current position)
-    target_pose.pose.orientation.x = 0.0;
-    target_pose.pose.orientation.y = 0.0;
-    target_pose.pose.orientation.z = 0.0;
-    target_pose.pose.orientation.w = 1.0;
+    // Set orientation from requested Euler yaw (radians)
+    {
+        tf2::Quaternion q;
+        q.setRPY(0.0, 0.0, req.yaw);
+        target_pose.pose.orientation = tf2::toMsg(q);
+    }
     
     // Set the target point in DriveBehavior
     DriveBehavior::INSTANCE.set_point(target_pose);
