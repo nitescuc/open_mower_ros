@@ -303,7 +303,7 @@ void statusReceived(const mower_msgs::Status::ConstPtr &msg) {
 void costmapReceived(const nav_msgs::OccupancyGrid::ConstPtr &msg) {
     std::lock_guard<std::recursive_mutex> lk{mower_logic_mutex};
     last_costmap = msg;
-    ROS_DEBUG_STREAM_THROTTLE(10, "Costmap received: " << msg->info.width << "x" << msg->info.height 
+    ROS_INFO_STREAM_THROTTLE(10, "Costmap received: " << msg->info.width << "x" << msg->info.height 
                                << " resolution: " << msg->info.resolution);
 }
 

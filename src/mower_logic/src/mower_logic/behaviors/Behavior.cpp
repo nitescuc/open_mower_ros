@@ -62,22 +62,19 @@ int Behavior::on_progress(int state) {
             }
             // Check for progress timeout
             {
-                static int old_index = -1;
-                static ros::Time last_index_time = ros::Time::now();
-                
                 int index = getCurrentPathProgress();
-                if (index != old_index) {
-                    last_index_time = ros::Time::now();
-                    old_index = index;
+                if (index != progress_old_index) {
+                    progress_last_index_time = ros::Time::now();
+                    progress_old_index = index;
                 } else {
                     if (!this->hasGoodGPS() || isEmergencyMode()) {
                         if (!this->hasGoodGPS())
                             ROS_WARN_STREAM_THROTTLE(10, "Behavior: (on_progress) - No GPS signal, waiting.");
                         if (isEmergencyMode())
                             ROS_WARN_STREAM_THROTTLE(10, "Behavior: (on_progress) - Emergency mode, waiting.");
-                        last_index_time = ros::Time::now();
+                        progress_last_index_time = ros::Time::now();
                     } else {
-                        if ((ros::Time::now() - last_index_time).toSec() > 30.0) {
+                        if ((ros::Time::now() - progress_last_index_time).toSec() > 30.0) {
                             ROS_ERROR_STREAM("Behavior: (on_progress) - No progress for 30 seconds, stopping path execution. HasGoodGPS=" << this->hasGoodGPS());
                             return PROGRESS_ERROR_RECOVERABLE; // treat as recoverable to allow retry
                         }
@@ -193,6 +190,10 @@ bool Behavior::execute_goal(actionlib::SimpleActionClient<mbf_msgs::MoveBaseActi
         bool unrecoverable_error = false;
 
         ros::Rate r(10);
+
+        // Initialize progress tracking variables
+        progress_old_index = -1;
+        progress_last_index_time = ros::Time::now();
 
         while (waitingForResult) {
             r.sleep();
