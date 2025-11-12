@@ -167,6 +167,9 @@ bool Behavior::isCurrentPositionLethal() {
     if (is_lethal) {
         ROS_WARN_STREAM("Behavior::isCurrentPositionLethal - Robot at position (" << robot_x << ", " << robot_y 
                        << ") has lethal cost: " << (int)cost);
+    } else {
+        ROS_INFO_STREAM_THROTTLE(10, "Behavior::isCurrentPositionLethal - Robot at position (" << robot_x << ", " << robot_y 
+                       << ") has non-lethal cost: " << (int)cost);
     }
     
     return is_lethal;
