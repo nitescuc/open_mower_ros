@@ -31,6 +31,8 @@ extern nav_msgs::OccupancyGrid::ConstPtr getCostmap();
 extern nav_msgs::Odometry getOdometry();
 extern actionlib::SimpleActionClient<mbf_msgs::MoveBaseAction> *mbfClient;
 
+#define LETHAL_COST_THRESHOLD 100
+
 int Behavior::on_progress(int state) {
     const auto last_status = getStatus();
     
@@ -162,7 +164,7 @@ bool Behavior::isCurrentPositionLethal() {
     }
     
     unsigned char cost = costmap->data[index];
-    bool is_lethal = (cost >= costmap_2d::LETHAL_OBSTACLE);
+    bool is_lethal = (cost >= LETHAL_COST_THRESHOLD);
     
     if (is_lethal) {
         ROS_WARN_STREAM("Behavior::isCurrentPositionLethal - Robot at position (" << robot_x << ", " << robot_y 
