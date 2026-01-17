@@ -8,12 +8,20 @@
         <rosparam command="load" file="$(find open_mower)/params/ekf/odometry_converter.yaml" />
         <param name="antenna_offset_x" value="$(env OM_ANTENNA_OFFSET_X)"/>
         <param name="antenna_offset_y" value="$(env OM_ANTENNA_OFFSET_Y)"/>
+        <param name="use_odom_frame" value="$(env OM_USE_ODOM_FRAME)"/>
     </node>
     <node pkg="robot_localization" type="ekf_localization_node" name="ekf_localization_map" output="screen"> 
         <remap from="odometry/filtered" to="odometry_map/filtered"/>
         <remap from="set_pose" to="odometry_map/set_pose"/>
         <rosparam command="load" file="$(find open_mower)/params/ekf/robot_localization_map.yaml" />
     </node>
+    <group if="$(eval env('USE_ODOM_FRAME')=='true')">
+        <node pkg="robot_localization" type="ekf_localization_node" name="ekf_localization_odom" output="screen"> 
+            <remap from="odometry/filtered" to="odometry_odom/filtered"/>
+            <remap from="set_pose" to="odometry_odom/set_pose"/>
+            <rosparam command="load" file="$(find open_mower)/params/ekf/robot_localization_odom.yaml" />
+        </node>
+    </group>
 
     <group if="$(eval env('OM_SLAM')=='ekf_amcl')">
         <node pkg="amcl" type="amcl" name="amcl">

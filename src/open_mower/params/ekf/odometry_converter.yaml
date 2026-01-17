@@ -4,3 +4,5 @@ cov_factor_float_pos: 500.0
 cov_factor_float_ori: 500.0
 orientation_min_speed: 0.01
 min_position_accuracy: 0.0
+fixed_acceleration_covariance: 0.5
+fixed_yaw_covariance: 0.01

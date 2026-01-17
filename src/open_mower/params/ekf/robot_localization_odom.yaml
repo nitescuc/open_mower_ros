@@ -1,21 +1,31 @@
-frequency: 30
-
+frequency: 50
+sensor_timeout: 0.1
 two_d_mode: true
 
-print_diagnostics: false
-transform_timeout: 0.2
+map_frame: map
+odom_frame: odom
+base_link_frame: base_link
+world_frame: odom
 
+publish_tf: true
+publish_acceleration: false
+
+print_diagnostics: false
+#transform_timeout: 0.2
+
+# wheel odometry
 odom0: /odom_converter/odom
 odom0_config: [false, false, false,
                false, false, false,
                true, true, false,
-               false, false, false,
+               false, false, true,
                false, false, false]
 odom0_differential: false
+odom0_relative: false
 odom0_nodelay: true
-#odom0_relative: false
 odom0_queue_size: 10
 
+# Absolute orientation from odometry converter
 imu0: /odom_converter/orientation
 imu0_config: [false, false, false,
               false, false, true,
@@ -27,41 +37,36 @@ imu0_relative: false
 imu0_queue_size: 10
 imu0_remove_gravitational_acceleration: true
 
-use_control: false
-
-imu1: /imu/data_raw
+# IMU
+imu1: /imu/filtered_imu
 imu1_config: [false, false, false,
               false, false, false,
               false, false, false,
-              true, true, true,
-              true, true, true]
+              false, false, true,
+              true, true, false]
 imu1_nodelay: true
 imu1_differential: false
-imu1_relative: true 
+imu1_relative: false 
 imu1_queue_size: 10
 imu1_remove_gravitational_acceleration: true
 
-
-odom_frame: odom
-base_link_frame: base_link
-world_frame: odom
-publish_tf: true
+use_control: false
 
 process_noise_covariance: [0.05, 0,    0,    0,    0,    0,    0,     0,     0,    0,    0,    0,    0,    0,    0,
                            0,    0.05, 0,    0,    0,    0,    0,     0,     0,    0,    0,    0,    0,    0,    0,
                            0,    0,    0.06, 0,    0,    0,    0,     0,     0,    0,    0,    0,    0,    0,    0,
-                           0,    0,    0,    0.03, 0,    0,    0,     0,     0,    0,    0,    0,    0,    0,    0,
-                           0,    0,    0,    0,    0.03, 0,    0,     0,     0,    0,    0,    0,    0,    0,    0,
+                           0,    0,    0,    1000, 0,    0,    0,     0,     0,    0,    0,    0,    0,    0,    0,
+                           0,    0,    0,    0,    1000, 0,    0,     0,     0,    0,    0,    0,    0,    0,    0,
                            0,    0,    0,    0,    0,    0.06, 0,     0,     0,    0,    0,    0,    0,    0,    0,
-                           0,    0,    0,    0,    0,    0,    0.025, 0,     0,    0,    0,    0,    0,    0,    0,
-                           0,    0,    0,    0,    0,    0,    0,     0.025, 0,    0,    0,    0,    0,    0,    0,
-                           0,    0,    0,    0,    0,    0,    0,     0,     0.04, 0,    0,    0,    0,    0,    0,
-                           0,    0,    0,    0,    0,    0,    0,     0,     0,    0.01, 0,    0,    0,    0,    0,
-                           0,    0,    0,    0,    0,    0,    0,     0,     0,    0,    0.01, 0,    0,    0,    0,
-                           0,    0,    0,    0,    0,    0,    0,     0,     0,    0,    0,    0.02, 0,    0,    0,
-                           0,    0,    0,    0,    0,    0,    0,     0,     0,    0,    0,    0,    0.01, 0,    0,
-                           0,    0,    0,    0,    0,    0,    0,     0,     0,    0,    0,    0,    0,    0.01, 0,
-                           0,    0,    0,    0,    0,    0,    0,     0,     0,    0,    0,    0,    0,    0,    0.015]
+                           0,    0,    0,    0,    0,    0,    0.02 , 0,     0,    0,    0,    0,    0,    0,    0,
+                           0,    0,    0,    0,    0,    0,    0,     1000,  0,    0,    0,    0,    0,    0,    0,
+                           0,    0,    0,    0,    0,    0,    0,     0,     1000, 0,    0,    0,    0,    0,    0,
+                           0,    0,    0,    0,    0,    0,    0,     0,     0,    1000, 0,    0,    0,    0,    0,
+                           0,    0,    0,    0,    0,    0,    0,     0,     0,    0,    1000, 0,    0,    0,    0,
+                           0,    0,    0,    0,    0,    0,    0,     0,     0,    0,    0,    0.05, 0,    0,    0,
+                           0,    0,    0,    0,    0,    0,    0,     0,     0,    0,    0,    0,    0.05, 0,    0,
+                           0,    0,    0,    0,    0,    0,    0,     0,     0,    0,    0,    0,    0,    0.3 , 0,
+                           0,    0,    0,    0,    0,    0,    0,     0,     0,    0,    0,    0,    0,    0,    0.3]
 
 initial_estimate_covariance: [1e-9, 0,    0,    0,    0,    0,    0,    0,    0,    0,     0,     0,     0,    0,    0,
                               0,    1e-9, 0,    0,    0,    0,    0,    0,    0,    0,     0,     0,     0,    0,    0,
