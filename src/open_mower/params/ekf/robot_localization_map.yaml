@@ -6,10 +6,12 @@ two_d_mode: true
 print_diagnostics: false
 
 map_frame: map
-odom_frame: odom
+odom_frame: map
 base_link_frame: base_link
 world_frame: map
 publish_tf: true
+
+reset_on_time_jump: true
 
 transform_time_offset: 0.0
 transform_timeout: 0.2
@@ -18,7 +20,13 @@ smooth_lagged_data: true
 history_length: 10
 dynamic_process_noise_covariance: true
 
-pose0: /odom_converter/pose
+use_control: false
+#control_config: [true, false, false,
+#                 false, false, true]
+#acceleration_limits: [0.5, 0.0, 0.0,
+#                      0.0, 0.0, 2.0]
+
+#pose0: /odom_converter/pose
 pose0_config: [true,  true,  false,
                false, false, false,
                false, false, false,
@@ -26,7 +34,7 @@ pose0_config: [true,  true,  false,
                false, false, false]
 pose0_differential: false
 pose0_relative: false
-pose0_rejection_threshold: 2
+pose0_rejection_threshold: 1.5
 
 pose1: amcl_pose # AMCL!
 pose1_config: [true,  true, false,

@@ -2,6 +2,6 @@
   <node pkg="tf2_ros" type="static_transform_publisher" name="bumper_left_transform_broadcaster" args="0.3 -0.05 0.05 0 0 0 1 base_link bumper_left_link" />
   <node pkg="tf2_ros" type="static_transform_publisher" name="bumper_right_transform_broadcaster" args="0.3 0.05 0.05 0 0 0 1 base_link bumper_right_link" />
   <node pkg="tf2_ros" type="static_transform_publisher" name="laser_transform_broadcaster" args="-0.05 0.0 0.25 0 0 0 1 base_link base_laser" />
-  <node pkg="tf2_ros" type="static_transform_publisher" name="imu_transform_broadcaster" args="0.10 0.0 0.10 0 0 0 1 base_link imu"/>
+  <node pkg="tf2_ros" type="static_transform_publisher" name="imu_transform_broadcaster" args="0.10 -0.05 0.10 0 0 0 1 base_link imu"/>
   <node pkg="tf2_ros" type="static_transform_publisher" name="gps_transform_broadcaster" args="0.15 0.0 0.0 0 0 0 1 base_link gps"/>
 </launch>
