@@ -51,6 +51,7 @@
 #include "std_msgs/Bool.h"
 #include "mower_msgs/HighLevelStatus.h"
 #include "mower_msgs/StartInAreaSrv.h"
+#include "mower_msgs/StartAtPositionSrv.h"
 #include "mower_msgs/DriveToPositionSrv.h"
 #include "mower_map/ClearMapSrv.h"
 #include "xbot_msgs/AbsolutePose.h"
@@ -636,7 +637,7 @@ void checkSafety(const ros::TimerEvent &timer_event) {
 
     // Give it a chance to leave mower emergency mode 
     if(last_status.emergency) {
-        if(currentBehavior == &MowingBehavior::INSTANCE) {
+        if(currentBehavior == &MowingBehavior::INSTANCE || currentBehavior == &DockingBehavior::INSTANCE || currentBehavior == &UndockingBehavior::RETRY_INSTANCE) {
             setEmergencyMode(true);
             // currentBehavior->requestPause();
             should_enable_mower = false;
@@ -737,6 +738,17 @@ bool startInAreaCommand(mower_msgs::StartInAreaSrvRequest &req, mower_msgs::Star
 //     cfg.current_area = req.area;
 //     cfg.clear_path_on_start = true;
 //     setConfig(cfg);
+    // start
+    if (currentBehavior) {
+        ROS_INFO_STREAM("Current behavior exists: " << currentBehavior->state_name());
+        currentBehavior->command_start();
+    }
+    return true;
+}
+
+bool startAtPositionCommand(mower_msgs::StartAtPositionSrvRequest &req, mower_msgs::StartAtPositionSrvResponse &res) {
+    ROS_INFO_STREAM("Starting in area " << req.area << " at position (" << req.x << ", " << req.y << ")");
+    MowingBehavior::INSTANCE.set_start_index_from_position(req.area, req.x, req.y);
     // start
     if (currentBehavior) {
         ROS_INFO_STREAM("Current behavior exists: " << currentBehavior->state_name());
@@ -934,6 +946,7 @@ int main(int argc, char **argv) {
 
     ros::ServiceServer high_level_control_srv = n->advertiseService("mower_service/high_level_control", highLevelCommand);
     ros::ServiceServer start_in_area_srv = n->advertiseService("mower_service/start_in_area", startInAreaCommand);
+    ros::ServiceServer start_at_position_srv = n->advertiseService("mower_service/start_at_position", startAtPositionCommand);
     ros::ServiceServer drive_to_position_srv = n->advertiseService("mower_service/drive_to_position", driveToPositionCommand);
 
 

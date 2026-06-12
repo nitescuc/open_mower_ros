@@ -47,6 +47,11 @@ private:
     std::string currentMowingPlanDigest;
     double currentMowingAngleIncrementSum;
     int lastFixPointArea; // Track which area we last navigated to fix point for
+    
+    // Position-based start
+    bool use_position_based_start = false;
+    float start_position_x = 0.0;
+    float start_position_y = 0.0;
 
 public:
     MowingBehavior();
@@ -90,8 +95,12 @@ public:
     void checkpoint();
 
     bool restore_checkpoint();
+    
+    void reset_checkpoint();
 
     void set_start_area(int area);
+
+    void set_start_index_from_position(int area, float x, float y);
 };
 
 
