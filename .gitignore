@@ -2,10 +2,12 @@
 build/
 devel/
 install/
+data/
 .catkin_workspace
 src/CMakeLists.txt
 
 .idea/
+.DS_Store
 
 logs/
 bin/
