@@ -22,6 +22,7 @@ add_service_files(
         MowerControlSrv.srv
         HighLevelControlSrv.srv
         StartInAreaSrv.srv
+        StartAtPositionSrv.srv
 	PerimeterControlSrv.srv
         DriveToPositionSrv.srv
 )

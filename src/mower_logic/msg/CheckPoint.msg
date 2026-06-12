@@ -1,5 +1,3 @@
-int32 currentMowingPath
 int32 currentMowingArea
-int32 currentMowingPathIndex
-string currentMowingPlanDigest
-float32 currentMowingAngleIncrementSum
+float64 position_x
+float64 position_y

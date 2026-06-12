@@ -1,5 +1,6 @@
 build
 devel
+data
 install
 logs
 .catkin_workspace
@@ -7,3 +8,4 @@ src/lib/openmower-lidar-control/CATKIN_IGNORE
 src/lib/ros_imu_bno055/CATKIN_IGNORE
 src/lib/gps_amcl
 src/lib/als_ros
+.DS_Store
